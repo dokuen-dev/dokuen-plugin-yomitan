@@ -1,0 +1,1126 @@
+[
+    [
+        "日",
+        "ひ",
+        "1 n",
+        "",
+        1999800,
+        [
+            {
+                "content": [
+                    {
+                        "content": [
+                            {
+                                "content": "day",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "days",
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "この服は寒い冬の日には向かない。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "These clothes are not appropriate for a cold winter day.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        1463770,
+        "⭐ ichi news2k"
+    ],
+    [
+        "日",
+        "ひ",
+        "2 n",
+        "",
+        1999799,
+        [
+            {
+                "content": [
+                    {
+                        "content": [
+                            {
+                                "content": "sun",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "sunshine",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "sunlight",
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "この部屋はあまり日が当たらない。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "This room does not get much sun.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        1463770,
+        "⭐ ichi news2k"
+    ],
+    [
+        "日",
+        "ひ",
+        "3 n",
+        "",
+        1999798,
+        [
+            {
+                "content": [
+                    {
+                        "content": [
+                            {
+                                "content": "(the) day",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "daytime",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "daylight",
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "冬が近づくにつれて日が短くなる。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "The days grow shorter as winter approaches.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        1463770,
+        "⭐ ichi news2k"
+    ],
+    [
+        "日",
+        "ひ",
+        "4 n",
+        "",
+        1999797,
+        [
+            {
+                "content": [
+                    {
+                        "content": [
+                            {
+                                "content": "date",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "deadline",
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "会議の日を決めなさい。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "Fix a date for the meeting.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        1463770,
+        "⭐ ichi news2k"
+    ],
+    [
+        "日",
+        "ひ",
+        "5 n",
+        "",
+        1999796,
+        [
+            {
+                "content": [
+                    {
+                        "content": [
+                            {
+                                "content": "(past) days",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "time (e.g. of one's childhood)",
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "われわれは過ぎし日の事を、必ずしも愛情とは言えないまでも少なくとも一種の憧れを持ってふりかえるのである。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "We look back on days gone by, if not always with affections, at any rate with a kind of wistfulness.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        1463770,
+        "⭐ ichi news2k"
+    ],
+    [
+        "日",
+        "ひ",
+        "6 n",
+        "",
+        1999795,
+        [
+            {
+                "content": [
+                    {
+                        "content": [
+                            {
+                                "content": "case (esp. unfortunate)",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "event",
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": "as 〜した日には, 〜と来た日には, etc.",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "notes"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'📝 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        1463770,
+        "⭐ ichi news2k"
+    ],
+    [
+        "日",
+        "にち",
+        "1 n abbr",
+        "",
+        999800,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "Sunday",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": [
+                                "see: ",
+                                {
+                                    "content": "日曜",
+                                    "href": "?query=日曜\u0026wildcards=off",
+                                    "lang": "ja",
+                                    "tag": "a"
+                                },
+                                {
+                                    "content": " Sunday",
+                                    "data": {
+                                        "content": "refGlosses"
+                                    },
+                                    "style": {
+                                        "fontSize": "65%",
+                                        "verticalAlign": "middle"
+                                    },
+                                    "tag": "span"
+                                }
+                            ],
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "references"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "'➡️ '"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "土日月の午前１０時半から午後４時まで開館。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "Open from 10:30am to 4pm on Sat, Sun, and Mon.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2083100,
+        "⭐ spec"
+    ],
+    [
+        "日",
+        "にち",
+        "2 suf",
+        "",
+        999799,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "nth day (of the month)",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "１３日の金曜日は不吉な日だと言われている。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "It is said that Friday the 13th is an unlucky day.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2083100,
+        "⭐ spec"
+    ],
+    [
+        "日",
+        "にち",
+        "3 ctr",
+        "",
+        999798,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "counter for days",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": [
+                            {
+                                "content": "その知らせが届いたのは２・３日たってからだった。",
+                                "tag": "li"
+                            },
+                            {
+                                "content": "It was not until a few days later that the news arrived.",
+                                "lang": "en",
+                                "style": {
+                                    "listStyleType": "'🇬🇧 '"
+                                },
+                                "tag": "li"
+                            }
+                        ],
+                        "data": {
+                            "content": "examples"
+                        },
+                        "lang": "ja",
+                        "style": {
+                            "listStyleType": "'🇯🇵 '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2083100,
+        "⭐ spec"
+    ],
+    [
+        "日",
+        "にち",
+        "4 n abbr",
+        "",
+        999797,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "Japan",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": [
+                                "see: ",
+                                {
+                                    "content": "日本",
+                                    "href": "?query=日本\u0026wildcards=off",
+                                    "lang": "ja",
+                                    "tag": "a"
+                                },
+                                {
+                                    "content": " Japan",
+                                    "data": {
+                                        "content": "refGlosses"
+                                    },
+                                    "style": {
+                                        "fontSize": "65%",
+                                        "verticalAlign": "middle"
+                                    },
+                                    "tag": "span"
+                                }
+                            ],
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "references"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "'➡️ '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2083100,
+        "⭐ spec"
+    ],
+    [
+        "日",
+        "か",
+        "1 n-suf",
+        "",
+        -200,
+        [
+            {
+                "content": {
+                    "content": {
+                        "content": "day of month",
+                        "tag": "li"
+                    },
+                    "data": {
+                        "content": "glossary"
+                    },
+                    "lang": "en",
+                    "style": {
+                        "listStyleType": "circle"
+                    },
+                    "tag": "ul"
+                },
+                "type": "structured-content"
+            }
+        ],
+        2083110,
+        ""
+    ],
+    [
+        "日",
+        "か",
+        "2 ctr",
+        "",
+        -201,
+        [
+            {
+                "content": {
+                    "content": {
+                        "content": "counter for days",
+                        "tag": "li"
+                    },
+                    "data": {
+                        "content": "glossary"
+                    },
+                    "lang": "en",
+                    "style": {
+                        "listStyleType": "circle"
+                    },
+                    "tag": "ul"
+                },
+                "type": "structured-content"
+            }
+        ],
+        2083110,
+        ""
+    ],
+    [
+        "日",
+        "んち",
+        "1 suf col",
+        "",
+        -200,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "nth day (of the month)",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": [
+                                "see: ",
+                                {
+                                    "content": [
+                                        {
+                                            "content": "日",
+                                            "href": "?query=日\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "（",
+                                        {
+                                            "content": "にち",
+                                            "href": "?query=にち\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "）"
+                                    ],
+                                    "lang": "ja",
+                                    "tag": "span"
+                                },
+                                {
+                                    "content": " 2. nth day (of the month)",
+                                    "data": {
+                                        "content": "refGlosses"
+                                    },
+                                    "style": {
+                                        "fontSize": "65%",
+                                        "verticalAlign": "middle"
+                                    },
+                                    "tag": "span"
+                                }
+                            ],
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "references"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "'➡️ '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2856786,
+        ""
+    ],
+    [
+        "日",
+        "んち",
+        "2 ctr col",
+        "",
+        -201,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "counter for days",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": [
+                                "see: ",
+                                {
+                                    "content": [
+                                        {
+                                            "content": "日",
+                                            "href": "?query=日\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "（",
+                                        {
+                                            "content": "にち",
+                                            "href": "?query=にち\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "）"
+                                    ],
+                                    "lang": "ja",
+                                    "tag": "span"
+                                },
+                                {
+                                    "content": " 3. counter for days",
+                                    "data": {
+                                        "content": "refGlosses"
+                                    },
+                                    "style": {
+                                        "fontSize": "65%",
+                                        "verticalAlign": "middle"
+                                    },
+                                    "tag": "span"
+                                }
+                            ],
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "references"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "'➡️ '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2856786,
+        ""
+    ],
+    [
+        "日",
+        "んち",
+        "forms",
+        "",
+        -202,
+        [
+            {
+                "content": {
+                    "content": [
+                        {
+                            "content": [
+                                {
+                                    "content": "",
+                                    "tag": "th"
+                                },
+                                {
+                                    "content": "日",
+                                    "style": {
+                                        "textAlign": "center"
+                                    },
+                                    "tag": "th"
+                                }
+                            ],
+                            "tag": "tr"
+                        },
+                        {
+                            "content": [
+                                {
+                                    "content": "んち",
+                                    "style": {
+                                        "textAlign": "left"
+                                    },
+                                    "tag": "th"
+                                },
+                                {
+                                    "content": "㊒",
+                                    "style": {
+                                        "textAlign": "center"
+                                    },
+                                    "tag": "td"
+                                }
+                            ],
+                            "tag": "tr"
+                        },
+                        {
+                            "content": [
+                                {
+                                    "content": "ち",
+                                    "style": {
+                                        "textAlign": "left"
+                                    },
+                                    "tag": "th"
+                                },
+                                {
+                                    "content": "㊒",
+                                    "style": {
+                                        "textAlign": "center"
+                                    },
+                                    "tag": "td"
+                                }
+                            ],
+                            "tag": "tr"
+                        }
+                    ],
+                    "data": {
+                        "content": "formsTable"
+                    },
+                    "tag": "table"
+                },
+                "type": "structured-content"
+            }
+        ],
+        2856786,
+        ""
+    ],
+    [
+        "日",
+        "ち",
+        "1 suf col",
+        "",
+        -10200,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "nth day (of the month)",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": [
+                                "see: ",
+                                {
+                                    "content": [
+                                        {
+                                            "content": "日",
+                                            "href": "?query=日\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "（",
+                                        {
+                                            "content": "にち",
+                                            "href": "?query=にち\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "）"
+                                    ],
+                                    "lang": "ja",
+                                    "tag": "span"
+                                },
+                                {
+                                    "content": " 2. nth day (of the month)",
+                                    "data": {
+                                        "content": "refGlosses"
+                                    },
+                                    "style": {
+                                        "fontSize": "65%",
+                                        "verticalAlign": "middle"
+                                    },
+                                    "tag": "span"
+                                }
+                            ],
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "references"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "'➡️ '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2856786,
+        ""
+    ],
+    [
+        "日",
+        "ち",
+        "2 ctr col",
+        "",
+        -10201,
+        [
+            {
+                "content": [
+                    {
+                        "content": {
+                            "content": "counter for days",
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "glossary"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "circle"
+                        },
+                        "tag": "ul"
+                    },
+                    {
+                        "content": {
+                            "content": [
+                                "see: ",
+                                {
+                                    "content": [
+                                        {
+                                            "content": "日",
+                                            "href": "?query=日\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "（",
+                                        {
+                                            "content": "にち",
+                                            "href": "?query=にち\u0026wildcards=off",
+                                            "tag": "a"
+                                        },
+                                        "）"
+                                    ],
+                                    "lang": "ja",
+                                    "tag": "span"
+                                },
+                                {
+                                    "content": " 3. counter for days",
+                                    "data": {
+                                        "content": "refGlosses"
+                                    },
+                                    "style": {
+                                        "fontSize": "65%",
+                                        "verticalAlign": "middle"
+                                    },
+                                    "tag": "span"
+                                }
+                            ],
+                            "tag": "li"
+                        },
+                        "data": {
+                            "content": "references"
+                        },
+                        "lang": "en",
+                        "style": {
+                            "listStyleType": "'➡️ '"
+                        },
+                        "tag": "ul"
+                    }
+                ],
+                "type": "structured-content"
+            }
+        ],
+        2856786,
+        ""
+    ],
+    [
+        "日",
+        "ち",
+        "forms",
+        "",
+        -10202,
+        [
+            {
+                "content": {
+                    "content": [
+                        {
+                            "content": [
+                                {
+                                    "content": "",
+                                    "tag": "th"
+                                },
+                                {
+                                    "content": "日",
+                                    "style": {
+                                        "textAlign": "center"
+                                    },
+                                    "tag": "th"
+                                }
+                            ],
+                            "tag": "tr"
+                        },
+                        {
+                            "content": [
+                                {
+                                    "content": "んち",
+                                    "style": {
+                                        "textAlign": "left"
+                                    },
+                                    "tag": "th"
+                                },
+                                {
+                                    "content": "㊒",
+                                    "style": {
+                                        "textAlign": "center"
+                                    },
+                                    "tag": "td"
+                                }
+                            ],
+                            "tag": "tr"
+                        },
+                        {
+                            "content": [
+                                {
+                                    "content": "ち",
+                                    "style": {
+                                        "textAlign": "left"
+                                    },
+                                    "tag": "th"
+                                },
+                                {
+                                    "content": "㊒",
+                                    "style": {
+                                        "textAlign": "center"
+                                    },
+                                    "tag": "td"
+                                }
+                            ],
+                            "tag": "tr"
+                        }
+                    ],
+                    "data": {
+                        "content": "formsTable"
+                    },
+                    "tag": "table"
+                },
+                "type": "structured-content"
+            }
+        ],
+        2856786,
+        ""
+    ]
+]

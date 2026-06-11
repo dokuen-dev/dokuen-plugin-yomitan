@@ -1,0 +1,123 @@
+<resources>
+    <string name="app_name">Yomitan for Dokuen</string>
+    <string name="header_description">Offline Dictionary Installer &amp; Manager</string>
+
+    <!-- Guide Card -->
+    <string name="guide_title">Getting Started</string>
+    <string name="guide_step_1">Install one or more dictionaries below.</string>
+    <string name="guide_step_2">Launch Dokuen Japanese Reader.</string>
+    <string name="guide_step_3_prefix">In Dokuen, go to\n</string>
+    <string name="guide_step_3_bold">"    Settings → Plugin Manager → Dictionary Plugins"</string>
+    <string name="guide_step_3_suffix">\nand select “Yomitan”.</string>
+    <string name="content_description_show_guide">Show Guide</string>
+    <string name="content_description_dismiss_guide">Dismiss Guide</string>
+
+    <!-- Dictionary List -->
+    <string name="section_installed_dictionaries">Installed Dictionaries</string>
+    <string name="content_description_exit_delete_mode">Exit delete mode</string>
+    <string name="content_description_enter_delete_mode">Enter delete mode</string>
+    <string name="no_dictionaries_installed">No dictionaries installed yet.\nImport a local ZIP file or download one of the presets below.</string>
+    <string name="dictionary_author_version">Author: %1$s • Ver: %2$s</string>
+    <string name="author_unknown">Unknown</string>
+    <string name="content_description_delete_dictionary">Delete Dictionary</string>
+    <string name="content_description_move_up">Move Up</string>
+    <string name="content_description_move_down">Move Down</string>
+
+    <!-- Plural for stats badge -->
+    <plurals name="installed_dictionaries_count">
+        <item quantity="zero">Installed: %1$d dictionaries</item>
+        <item quantity="one">Installed: %1$d dictionary</item>
+        <item quantity="other">Installed: %1$d dictionaries</item>
+    </plurals>
+
+    <!-- Install Options -->
+    <string name="section_install_dictionary">Install Dictionary</string>
+    <string name="download_presets_title">Download Presets</string>
+    <string name="preset_jitendex_title">Jitendex (Recommended)</string>
+    <string name="preset_jitendex_desc">Modern, beautiful J-E dictionary ~37MB ZIP</string>
+    <string name="preset_jmnedict_title">JMnedict</string>
+    <string name="preset_jmnedict_desc">Proper nouns, names, and places ~18MB ZIP</string>
+    <string name="preset_kanjidic_title">KANJIDIC English</string>
+    <string name="preset_kanjidic_desc">Lightweight kanji definitions ~5MB ZIP</string>
+    <string name="content_description_import">Import</string>
+    <string name="import_local_zip_title">Import Local ZIP File</string>
+    <string name="import_local_zip_desc">Select a downloaded Yomitan zip archive</string>
+    <string name="custom_url_title">Download from Custom URL</string>
+    <string name="custom_url_label">Dictionary ZIP URL</string>
+    <string name="custom_url_placeholder">https://example.com/dict.zip</string>
+    <string name="download_and_install_button">Download &amp; Install</string>
+
+    <!-- Progress Dialog / Toast / Errors -->
+    <string name="progress_details_ratio">%1$d / %2$d</string>
+    <plurals name="progress_details_processed">
+        <item quantity="one">%1$d processed</item>
+        <item quantity="other">%1$d processed</item>
+    </plurals>
+    <string name="progress_details_download_ratio">%1$.1fMB / %2$.1fMB</string>
+    <string name="progress_details_download_single">%1$.1fMB</string>
+    <string name="progress_downloading">Downloading %1$s…</string>
+    <string name="progress_starting_download">Starting download…</string>
+    <string name="progress_extracting_importing">Extracting &amp; Importing terms…</string>
+    <string name="progress_importing_local_zip">Importing local ZIP…</string>
+    <string name="progress_importing_dictionary">Importing dictionary…</string>
+    <string name="progress_deleting_dictionary">Deleting dictionary…</string>
+
+    <string name="toast_no_file_selected">No file selected</string>
+    <string name="toast_cannot_open_link">Cannot open browser link</string>
+    <string name="error_invalid_url">Please enter a valid dictionary ZIP URL</string>
+    <string name="custom_dictionary_name">Custom Yomitan Dictionary</string>
+    <string name="import_warning_details">Please keep the app open.\nImporting hundreds of thousands of terms may take a few minutes.</string>
+
+    <string name="delete_dictionary_title">Delete Dictionary</string>
+    <string name="delete_confirm_message">Are you sure you want to completely delete ‘%1$s’? This will free up storage space.</string>
+    <string name="delete_action">Delete</string>
+    <string name="cancel_action">Cancel</string>
+    <string name="ok_action">OK</string>
+    <string name="status_installed">INSTALLED</string>
+    <string name="status_download">DOWNLOAD</string>
+    <string name="button_return_to_dokuen">Return to Dokuen</string>
+    <string name="button_launch_dokuen">Launch Dokuen Japanese Reader</string>
+    <string name="button_get_dokuen">Get Dokuen Japanese Reader (Play Store)</string>
+    <string name="content_description_installed">Installed</string>
+
+    <string name="error_load_failed_title">Load Failed</string>
+    <string name="error_load_failed_message">Failed to retrieve imported dictionaries.</string>
+    <string name="error_delete_failed_title">Delete Failed</string>
+    <string name="error_delete_failed_message">Failed to delete the dictionary.</string>
+    <string name="error_file_error_title">File Error</string>
+    <string name="error_file_error_message">Could not open selected local ZIP file.</string>
+    <string name="error_import_failed_title">Import Failed</string>
+    <string name="error_import_failed_message">An unexpected error occurred during zip import.</string>
+    <string name="error_installation_failed_title">Installation Failed</string>
+    <string name="error_installation_failed_message">Failed to download and install dictionary.</string>
+
+    <!-- MainViewModel status -->
+    <plurals name="kanji_imported">
+        <item quantity="one">%1$,d kanji imported</item>
+        <item quantity="other">%1$,d kanji imported</item>
+    </plurals>
+    <plurals name="terms_kanji_imported">
+        <item quantity="one">%1$,d term / %2$,d kanji imported</item>
+        <item quantity="other">%1$,d terms / %2$,d kanji imported</item>
+    </plurals>
+    <plurals name="terms_imported">
+        <item quantity="one">%1$,d term imported</item>
+        <item quantity="other">%1$,d terms imported</item>
+    </plurals>
+
+    <!-- Service / Importer Exception messages -->
+    <string name="error_no_dictionaries_enabled">No dictionaries have been installed or enabled yet.</string>
+    <string name="error_query_empty">Query word is empty</string>
+    <string name="error_no_definitions_found">No definitions found for ‘%1$s’</string>
+    <string name="no_kanji_dictionary_title">No kanji dictionary</string>
+    <string name="no_kanji_dictionary_body">To look up kanji entries, install a kanji dictionary (such as KANJIDIC) and make sure it’s enabled in the Yomitan settings.</string>
+    <string name="deinflected_badge">"  Deinflected  "</string>
+    <string name="error_init_failed">Failed to initialize Yomitan: %1$s</string>
+
+    <!-- Importer specifics -->
+    <string name="error_dictionary_already_imported">Dictionary %1$s is already imported, skipped it.</string>
+    <string name="error_no_index_found">No dictionary index found in archive</string>
+    <string name="error_unrecognized_format">Unrecognized dictionary format</string>
+    <string name="error_image_not_found">Could not find image at path %1$s for %2$s</string>
+    <string name="error_unknown_media_type">Could not determine media type for image at %1$s</string>
+</resources>

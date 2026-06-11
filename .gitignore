@@ -1,0 +1,44 @@
+# Ignore common binary file types
+*.apk
+*.aab
+*.aar
+*.dex
+*.class
+
+# Ignore build directories and files
+/build/
+app/build/
+.gradle/
+.idea/
+.kotlin/
+.vscode/
+*.iml
+*.ap_
+*.aapt
+
+# Security and local configs
+local.properties
+secrets.properties
+*.jks
+*.keystore
+
+# Ignore specific Android files
+/captures/
+.externalNativeBuild/
+.cxx/
+/generated/
+/intermediates/
+/outputs/
+/reports/
+/lint-results/
+
+# Ignore log files
+*.log
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Generated debug entry files
+/debug_entry.json
+/debug_kanji_entry.json
