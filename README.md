@@ -5,6 +5,7 @@
 [![Compose](https://img.shields.io/badge/Compose-Jetpack-purple.svg?style=flat&logo=jetpackcompose)](https://developer.android.com)
 [![SQLite Room](https://img.shields.io/badge/SQLite-Room_Database-blue?style=flat&logo=sqlite)](https://developer.android.com/training/data-storage/room)
 [![License](https://img.shields.io/badge/License-GPL_v3-red.svg?style=flat)](LICENSE)
+[![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?logo=ko-fi&logoColor=white)](https://ko-fi.com/dokuenreader)
 
 A dictionary plugin for **Dokuen Japanese Reader** that adds offline **Yomitan** dictionary search
 capabilities on Android.
@@ -29,8 +30,6 @@ alongside [Dokuen Japanese Reader](https://play.google.com/store/apps/details?id
 it allows you to look up words and kanji offline. Dokuen handles the OCR and the system-wide
 overlay, while this plugin supplies the dictionary lookups, deinflection, and definition rendering.
 
----
-
 ## Features
 
 * **Yomitan Archive Importer:** Import any official or community Yomitan dictionary `.zip` package.
@@ -50,8 +49,6 @@ overlay, while this plugin supplies the dictionary lookups, deinflection, and de
     * Import local ZIPs from device storage.
     * Download dictionaries directly via custom URLs.
     * Reorder search priority of active dictionaries, or disable/delete them.
-
----
 
 ## Architecture & Internals
 
@@ -111,8 +108,6 @@ Data is stored using Android Jetpack Room with the following table entities:
 * **`MediaEntity`:** Caches images embedded inside the dictionaries as byte arrays.
 * **`TagMetaEntity`:** Stores tag category details (e.g. grammar, dialect) and styling hints.
 
----
-
 ## Getting Started
 
 > [!IMPORTANT]
@@ -132,8 +127,6 @@ Data is stored using Android Jetpack Room with the following table entities:
 3. Toggle the switches to activate the dictionaries you want to search.
 4. Use the Up/Down arrows to change the lookup order.
 5. Open **Dokuen Japanese Reader**, go to **Settings → Dictionary**, and select the Yomitan plugin.
-
----
 
 ## Development & Build
 
@@ -168,15 +161,11 @@ rather than a real one), runs them through the renderer, and writes the results 
 `debug_entry.json` and `debug_kanji_entry.json` at the project root. This is useful for iterating on
 the renderer without needing a full dictionary import.
 
----
-
 ## Contributing
 
 Contributions and pull requests are welcome. If you plan to work on something substantial, opening
 an issue first to discuss the approach is appreciated. See the [Roadmap](#roadmap) for known gaps,
 or browse the issue tracker for smaller tasks.
-
----
 
 ## Roadmap
 
@@ -195,7 +184,11 @@ port:
   Corpus) both for displaying corpus frequency inline with definitions and for influencing search
   result sort order. Neither is currently implemented.
 
----
+## Support
+
+If you use this project and it helps you out, please consider supporting its development!
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/dokuenreader)
 
 ## License
 
