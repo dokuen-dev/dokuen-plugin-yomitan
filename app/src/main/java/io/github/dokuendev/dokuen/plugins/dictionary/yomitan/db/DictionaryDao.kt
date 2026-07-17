@@ -29,6 +29,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.FrequencyUtil
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DictionaryDao
@@ -85,6 +86,20 @@ interface DictionaryDao {
     /** Retrieve a single dictionary record by its auto-generated id. */
     @Query("SELECT * FROM dictionaries WHERE id = :id LIMIT 1")
     suspend fun getDictionaryById(id: Long): DictionaryEntity?
+
+    /**
+     * Retrieve all successfully-installed dictionaries that actually contain frequency data.
+     *
+     * Mirrors yomitan's own "Frequency sorting dictionary" picker criterion
+     * (ext/js/pages/settings/sort-frequency-dictionary-controller.js#_updateDictionaryOptions):
+     * `counts.termMeta.freq > 0` or `counts.kanjiMeta.freq > 0`. The index.json
+     * `frequencyMode` field is deliberately not used here - yomitan itself never reads that
+     * field for anything except display, so a real frequency dictionary that omits it (as
+     * e.g. BCCWJ's own index.json does) must still be recognized.
+     */
+    suspend fun getFrequencyDictionaries(): List<DictionaryEntity> {
+        return getAllDictionaries().filter { it.importSuccess && FrequencyUtil.hasFrequencyData(it.counts) }
+    }
 
     // ─── getDictionaryCounts() helpers ────────────────────────────────────────
 
@@ -322,6 +337,23 @@ interface TermMetaDao {
     )
     suspend fun findByExpressionBulk(
         termList: List<String>,
+        dictionaries: List<String>,
+    ): List<TermMetaEntity>
+
+    /**
+     * Find all term-meta rows where expression matches any of the expressions or readings
+     * within the given dictionary set.
+     */
+    @Query(
+        """
+        SELECT * FROM termMeta
+        WHERE (expression IN (:expressions) OR expression IN (:readings))
+          AND dictionary IN (:dictionaries)
+    """
+    )
+    suspend fun findByExpressionAndReadingBulk(
+        expressions: List<String>,
+        readings: List<String>,
         dictionaries: List<String>,
     ): List<TermMetaEntity>
 }
