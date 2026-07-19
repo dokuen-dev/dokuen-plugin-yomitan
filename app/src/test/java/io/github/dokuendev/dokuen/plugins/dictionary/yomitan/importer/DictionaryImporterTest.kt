@@ -4,11 +4,18 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiMetaEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.MediaEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TagMetaEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermMetaEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -186,8 +193,7 @@ class DictionaryImporterTest {
 
         // Verify the expected progress callbacks sequence
         val expected = listOf(
-            Pair(0, 2),     // Step 3 initial progress
-            Pair(0, 3000),   // Step 5 progress count reset
+            Pair(0, 3000),   // Progress count setup before bank imports
             Pair(1000, 3000), // Step 6 term media
             Pair(2000, 3000), // Step 6 term list
             Pair(3000, 3000)  // Step 10 tag bank
@@ -252,7 +258,7 @@ class DictionaryImporterTest {
 
         assertNotNull(result.summary)
         assertEquals("V1 Dict", result.summary!!.title)
-        assertEquals(true, result.summary!!.importSuccess)
+        assertEquals(true, result.summary.importSuccess)
 
         // Verify V1 term
         val terms = db.termDao().findByExpression("犬", listOf("V1 Dict"))
@@ -558,5 +564,292 @@ class DictionaryImporterTest {
         assertEquals("Ichidan verb", tag.notes)
         assertEquals(15, tag.order)
         assertEquals(3, tag.score)
+    }
+
+    @Test
+    fun testImportFrequencyOnlyDictionary() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val db = AppDatabase.getDatabase(app)
+
+        withContext(Dispatchers.IO) {
+            db.clearAllTables()
+        }
+
+        val byteOutputStream = ByteArrayOutputStream()
+        val zipOutputStream = ZipOutputStream(byteOutputStream)
+
+        val indexEntry = ZipEntry("index.json")
+        zipOutputStream.putNextEntry(indexEntry)
+        val indexJson = """
+            {
+                "title": "JPDB Frequency",
+                "format": 3,
+                "revision": "1.0",
+                "sequenced": false,
+                "frequencyMode": "rank-based"
+            }
+        """.trimIndent()
+        zipOutputStream.write(indexJson.toByteArray(Charsets.UTF_8))
+        zipOutputStream.closeEntry()
+
+        val metaEntry = ZipEntry("term_meta_bank_1.json")
+        zipOutputStream.putNextEntry(metaEntry)
+        val metaJson = """
+            [
+                ["食べる", "freq", 100],
+                ["飲む", "freq", 250]
+            ]
+        """.trimIndent()
+        zipOutputStream.write(metaJson.toByteArray(Charsets.UTF_8))
+        zipOutputStream.closeEntry()
+
+        zipOutputStream.close()
+
+        val mediaLoader = AndroidMediaLoader()
+        val importer = DictionaryImporter(app, db, mediaLoader)
+        val result = importer.importDictionary(ByteArrayInputStream(byteOutputStream.toByteArray()), ImportDetails())
+
+        assertNotNull(result.summary)
+        assertTrue(result.summary!!.importSuccess)
+        assertEquals("rank-based", result.summary.frequencyMode)
+        assertTrue(result.errors.isEmpty())
+
+        val metas = db.termMetaDao().findByExpressionAndReadingBulk(
+            listOf("食べる"),
+            listOf("たべる"),
+            listOf("JPDB Frequency")
+        )
+        assertEquals(1, metas.size)
+        assertEquals("freq", metas[0].mode)
+        assertEquals("100", metas[0].data)
+    }
+
+    /**
+     * Yomitan's own dictionary-importer.js only sets summary.frequencyMode when index.json
+     * explicitly declares it (`if (typeof frequencyMode === 'string') { summary.frequencyMode
+     * = frequencyMode; }`) - it never guesses a value when the field is absent. frequencyMode
+     * is inert metadata (nothing in yomitan branches on it), so guessing "rank-based" for an
+     * omitted field can mislabel an occurrence-based dictionary.
+     */
+    @Test
+    fun testImportFrequencyOnlyDictionaryWithoutFrequencyModeLeavesItNull() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val db = AppDatabase.getDatabase(app)
+
+        withContext(Dispatchers.IO) {
+            db.clearAllTables()
+        }
+
+        val byteOutputStream = ByteArrayOutputStream()
+        val zipOutputStream = ZipOutputStream(byteOutputStream)
+
+        val indexEntry = ZipEntry("index.json")
+        zipOutputStream.putNextEntry(indexEntry)
+        val indexJson = """
+            {
+                "title": "No Mode Frequency Dict",
+                "format": 3,
+                "revision": "1.0",
+                "sequenced": false
+            }
+        """.trimIndent()
+        zipOutputStream.write(indexJson.toByteArray(Charsets.UTF_8))
+        zipOutputStream.closeEntry()
+
+        val metaEntry = ZipEntry("term_meta_bank_1.json")
+        zipOutputStream.putNextEntry(metaEntry)
+        val metaJson = """
+            [
+                ["食べる", "freq", 100]
+            ]
+        """.trimIndent()
+        zipOutputStream.write(metaJson.toByteArray(Charsets.UTF_8))
+        zipOutputStream.closeEntry()
+
+        zipOutputStream.close()
+
+        val mediaLoader = AndroidMediaLoader()
+        val importer = DictionaryImporter(app, db, mediaLoader)
+        val result = importer.importDictionary(ByteArrayInputStream(byteOutputStream.toByteArray()), ImportDetails())
+
+        assertNotNull(result.summary)
+        assertTrue(result.summary!!.importSuccess)
+        assertNull(result.summary.frequencyMode)
+        assertTrue(result.errors.isEmpty())
+    }
+
+    @Test
+    fun testDeleteDictionaryCascades() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val db = AppDatabase.getDatabase(app)
+
+        withContext(Dispatchers.IO) {
+            db.clearAllTables()
+        }
+
+        val targetDict = "Delete Target Dict"
+        val keepDict = "Keep Target Dict"
+
+        // Insert records into all 7 tables for targetDict and keepDict
+        withContext(Dispatchers.IO) {
+            // dictionaries
+            db.dictionaryDao().insertDictionary(
+                DictionaryEntity(
+                    title = targetDict, revision = "1.0", sequenced = false, version = 3,
+                    importDate = 0L, prefixWildcardsSupported = true, styles = "", counts = null, importSuccess = true
+                )
+            )
+            db.dictionaryDao().insertDictionary(
+                DictionaryEntity(
+                    title = keepDict, revision = "1.0", sequenced = false, version = 3,
+                    importDate = 0L, prefixWildcardsSupported = true, styles = "", counts = null, importSuccess = true
+                )
+            )
+
+            // terms
+            db.termDao().bulkAdd(
+                listOf(
+                    TermEntity(
+                        dictionary = targetDict, expression = "犬", reading = "いぬ",
+                        definitionTags = null, rules = "", score = 100.0, glossary = "[\"dog\"]",
+                        sequence = null, termTags = null
+                    ),
+                    TermEntity(
+                        dictionary = keepDict, expression = "猫", reading = "ねこ",
+                        definitionTags = null, rules = "", score = 200.0, glossary = "[\"cat\"]",
+                        sequence = null, termTags = null
+                    )
+                )
+            )
+
+            // termMeta
+            db.termMetaDao().bulkAdd(
+                listOf(
+                    TermMetaEntity(dictionary = targetDict, expression = "犬", mode = "freq", data = "100"),
+                    TermMetaEntity(dictionary = keepDict, expression = "猫", mode = "freq", data = "200")
+                )
+            )
+
+            // kanji
+            db.kanjiDao().bulkAdd(
+                listOf(
+                    KanjiEntity(
+                        dictionary = targetDict, character = "犬", onyomi = "ケン", kunyomi = "いぬ",
+                        tags = "", meanings = "[\"dog\"]", stats = null
+                    ),
+                    KanjiEntity(
+                        dictionary = keepDict, character = "猫", onyomi = "ビョウ", kunyomi = "ねこ",
+                        tags = "", meanings = "[\"cat\"]", stats = null
+                    )
+                )
+            )
+
+            // kanjiMeta
+            db.kanjiMetaDao().bulkAdd(
+                listOf(
+                    KanjiMetaEntity(dictionary = targetDict, character = "犬", mode = "freq", data = "1"),
+                    KanjiMetaEntity(dictionary = keepDict, character = "猫", mode = "freq", data = "2")
+                )
+            )
+
+            // tagMeta
+            db.tagMetaDao().bulkAdd(
+                listOf(
+                    TagMetaEntity(
+                        dictionary = targetDict,
+                        name = "tag1",
+                        category = "cat1",
+                        notes = "notes",
+                        order = 1,
+                        score = 1
+                    ),
+                    TagMetaEntity(
+                        dictionary = keepDict,
+                        name = "tag2",
+                        category = "cat2",
+                        notes = "notes2",
+                        order = 2,
+                        score = 2
+                    )
+                )
+            )
+
+            // media
+            db.mediaDao().bulkAdd(
+                listOf(
+                    MediaEntity(
+                        dictionary = targetDict,
+                        path = "img1.png",
+                        mediaType = "image/png",
+                        width = 10,
+                        height = 10,
+                        content = byteArrayOf(1)
+                    ),
+                    MediaEntity(
+                        dictionary = keepDict,
+                        path = "img2.png",
+                        mediaType = "image/png",
+                        width = 20,
+                        height = 20,
+                        content = byteArrayOf(2)
+                    )
+                )
+            )
+        }
+
+        // Verify initial state: both dictionaries have entries in all 7 tables
+        assertEquals(1, db.dictionaryDao().dictionaryExists(targetDict))
+        assertEquals(1, db.dictionaryDao().dictionaryExists(keepDict))
+
+        assertEquals(1, db.termDao().findByExpression("犬", listOf(targetDict)).size)
+        assertEquals(1, db.termDao().findByExpression("猫", listOf(keepDict)).size)
+
+        assertEquals(
+            1,
+            db.termMetaDao().findByExpressionAndReadingBulk(listOf("犬"), listOf(""), listOf(targetDict)).size
+        )
+        assertEquals(
+            1,
+            db.termMetaDao().findByExpressionAndReadingBulk(listOf("猫"), listOf(""), listOf(keepDict)).size
+        )
+
+        assertEquals(1, db.kanjiDao().findByCharacterBulk(listOf("犬"), listOf(targetDict)).size)
+        assertEquals(1, db.kanjiDao().findByCharacterBulk(listOf("猫"), listOf(keepDict)).size)
+
+        assertEquals(1, db.kanjiMetaDao().findByCharacterBulk(listOf("犬"), listOf(targetDict)).size)
+        assertEquals(1, db.kanjiMetaDao().findByCharacterBulk(listOf("猫"), listOf(keepDict)).size)
+
+        assertNotNull(db.tagMetaDao().findTagForTitle("tag1", targetDict))
+        assertNotNull(db.tagMetaDao().findTagForTitle("tag2", keepDict))
+
+        assertNotNull(db.mediaDao().getMedia("img1.png", targetDict))
+        assertNotNull(db.mediaDao().getMedia("img2.png", keepDict))
+
+        // Execute deleteDictionary
+        db.dictionaryDeletionDao().deleteDictionary(targetDict)
+
+        // Verify targetDict entries are deleted across all 7 tables: dictionaries, terms, termMeta, kanji, kanjiMeta, tagMeta, media
+        assertEquals(0, db.dictionaryDao().dictionaryExists(targetDict))
+        assertEquals(0, db.termDao().findByExpression("犬", listOf(targetDict)).size)
+        assertEquals(
+            0,
+            db.termMetaDao().findByExpressionAndReadingBulk(listOf("犬"), listOf(""), listOf(targetDict)).size
+        )
+        assertEquals(0, db.kanjiDao().findByCharacterBulk(listOf("犬"), listOf(targetDict)).size)
+        assertEquals(0, db.kanjiMetaDao().findByCharacterBulk(listOf("犬"), listOf(targetDict)).size)
+        assertEquals(null, db.tagMetaDao().findTagForTitle("tag1", targetDict))
+        assertEquals(null, db.mediaDao().getMedia("img1.png", targetDict))
+
+        // Verify keepDict entries remain intact in all tables
+        assertEquals(1, db.dictionaryDao().dictionaryExists(keepDict))
+        assertEquals(1, db.termDao().findByExpression("猫", listOf(keepDict)).size)
+        assertEquals(
+            1,
+            db.termMetaDao().findByExpressionAndReadingBulk(listOf("猫"), listOf(""), listOf(keepDict)).size
+        )
+        assertEquals(1, db.kanjiDao().findByCharacterBulk(listOf("猫"), listOf(keepDict)).size)
+        assertEquals(1, db.kanjiMetaDao().findByCharacterBulk(listOf("猫"), listOf(keepDict)).size)
+        assertNotNull(db.tagMetaDao().findTagForTitle("tag2", keepDict))
+        assertNotNull(db.mediaDao().getMedia("img2.png", keepDict))
     }
 }

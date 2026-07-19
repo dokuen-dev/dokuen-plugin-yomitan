@@ -20,6 +20,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermMetaEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.DecodeSequenceMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -27,7 +28,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.decodeToSequence
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -127,48 +128,43 @@ class DictionaryImporter(
                 inputStream.copyTo(output)
             }
 
-            db.withTransaction {
-                ZipFile(tempFile).use { zipFile ->
-                    // ── Step 2: read & validate index.json ───────────────────────────
-                    val index = readAndValidateIndex(zipFile)
-                    val dictionaryTitle = index.title
-                    val version = index.version   // 1 or 3
+            ZipFile(tempFile).use { zipFile ->
+                // ── Step 2: read & validate index.json ───────────────────────────
+                val index = readAndValidateIndex(zipFile)
+                val dictionaryTitle = index.title
+                val version = index.version   // 1 or 3
 
-                    if (db.dictionaryDao().dictionaryExists(dictionaryTitle) != 0) {
-                        throw Exception(context.getString(R.string.error_dictionary_already_imported, dictionaryTitle))
-                    }
+                if (db.dictionaryDao().dictionaryExists(dictionaryTitle) != 0) {
+                    throw Exception(context.getString(R.string.error_dictionary_already_imported, dictionaryTitle))
+                }
 
-                    // ── Step 3: discover bank files ───────────────────────────────────
-                    val allEntries = zipFile.entries().asSequence().toList()
-                    val termEntries = allEntries.filter { it.name.matches(Regex("term_bank_(\\d+)\\.json")) }
-                        .sortedBy { bankNumber(it.name) }
-                    val termMetaEntries = allEntries.filter { it.name.matches(Regex("term_meta_bank_(\\d+)\\.json")) }
-                        .sortedBy { bankNumber(it.name) }
-                    val kanjiEntries = allEntries.filter { it.name.matches(Regex("kanji_bank_(\\d+)\\.json")) }
-                        .sortedBy { bankNumber(it.name) }
-                    val kanjiMetaEntries = allEntries.filter { it.name.matches(Regex("kanji_meta_bank_(\\d+)\\.json")) }
-                        .sortedBy { bankNumber(it.name) }
-                    val tagEntries = allEntries.filter { it.name.matches(Regex("tag_bank_(\\d+)\\.json")) }
-                        .sortedBy { bankNumber(it.name) }
+                // ── Step 3: discover bank files ───────────────────────────────────
+                val allEntries = zipFile.entries().asSequence().toList()
+                val termEntries = allEntries.filter { it.name.matches(Regex("term_bank_(\\d+)\\.json")) }
+                    .sortedBy { bankNumber(it.name) }
+                val termMetaEntries = allEntries.filter { it.name.matches(Regex("term_meta_bank_(\\d+)\\.json")) }
+                    .sortedBy { bankNumber(it.name) }
+                val kanjiEntries = allEntries.filter { it.name.matches(Regex("kanji_bank_(\\d+)\\.json")) }
+                    .sortedBy { bankNumber(it.name) }
+                val kanjiMetaEntries = allEntries.filter { it.name.matches(Regex("kanji_meta_bank_(\\d+)\\.json")) }
+                    .sortedBy { bankNumber(it.name) }
+                val tagEntries = allEntries.filter { it.name.matches(Regex("tag_bank_(\\d+)\\.json")) }
+                    .sortedBy { bankNumber(it.name) }
 
-                    progressNextStep(
-                        termEntries.size + termMetaEntries.size + kanjiEntries.size +
-                                kanjiMetaEntries.size + tagEntries.size
-                    )
+                // ── Step 4 (implicit): validation skipped; full AJV port is out of
+                //    scope. Add your own schema validation before calling this.     ──
 
-                    // ── Step 4 (implicit): validation skipped; full AJV port is out of
-                    //    scope. Add your own schema validation before calling this.     ──
+                // Progress budget doubles for term files (media + terms)
+                progressNextStep(
+                    (termEntries.size * 2 + termMetaEntries.size + kanjiEntries.size +
+                            kanjiMetaEntries.size + tagEntries.size) * chunkSize
+                )
 
+                db.withTransaction {
                     // ── Step 5: insert initial dictionary record ──────────────────────
                     val importDate = System.currentTimeMillis()
                     val initialSummary = buildInitialSummary(index, details, importDate)
                     val dictionaryId = db.dictionaryDao().insertDictionary(initialSummary)
-
-                    // Progress budget doubles for term files (media + terms)
-                    progressNextStep(
-                        (termEntries.size * 2 + termMetaEntries.size + kanjiEntries.size +
-                                kanjiMetaEntries.size + tagEntries.size) * chunkSize
-                    )
 
                     // ── Step 6: term banks ────────────────────────────────────────────
                     val uniqueMediaPaths = mutableSetOf<String>()
@@ -176,29 +172,35 @@ class DictionaryImporter(
                     var mediaTotal = 0
 
                     for (entry in termEntries) {
-                        val requirements = mutableListOf<ImportRequirement>()
-                        val termList = zipFile.getInputStream(entry).use { stream ->
-                            if (version == 1)
+                        zipFile.getInputStream(entry).use { stream ->
+                            val requirements = mutableListOf<ImportRequirement>()
+                            val termSequence = if (version == 1)
                                 readTermBankV1(stream, dictionaryTitle, details.prefixWildcardsSupported)
                             else
                                 readTermBankV3(stream, dictionaryTitle, details.prefixWildcardsSupported, requirements)
+
+                            for (chunk in termSequence.chunked(chunkSize)) {
+                                // Pulling this chunk from the lazy sequence just ran
+                                // processGlossary for exactly these entries, so `requirements`
+                                // now holds only this chunk's image references.
+                                val notAdded = requirements.filter { it.sourcePath !in uniqueMediaPaths }
+                                uniqueMediaPaths.addAll(requirements.map { it.sourcePath })
+                                val newMedia = resolveRequirements(notAdded, zipFile)
+                                requirements.clear()
+
+                                db.mediaDao().bulkAdd(newMedia)
+                                mediaTotal += newMedia.size
+
+                                db.termDao().bulkAdd(chunk)
+                                termsTotal += chunk.size
+                            }
                         }
-
-                        // resolve requirements
-                        val alreadyAdded = requirements.filter { it.sourcePath in uniqueMediaPaths }
-                        val notAdded = requirements.filter { it.sourcePath !in uniqueMediaPaths }
-                        uniqueMediaPaths.addAll(requirements.map { it.sourcePath })
-
-                        // resolve already-added (must still update target to get correct path/dimensions)
-                        resolveRequirements(alreadyAdded, zipFile)
-                        val newMedia = resolveRequirements(notAdded, zipFile)
-
-                        bulkAdd(newMedia) { chunk -> db.mediaDao().bulkAdd(chunk) }
-                        mediaTotal += newMedia.size
+                        // Two calls, not a duplicate: the progress budget above reserves
+                        // 2 chunkSize units per term_bank file (media + terms), matching the
+                        // pre-streaming code's two separate steps. Media and terms are now
+                        // interleaved per chunk rather than done as two passes, but the
+                        // budget still expects both units consumed once the file is done.
                         progress()
-
-                        bulkAdd(termList) { chunk -> db.termDao().bulkAdd(chunk) }
-                        termsTotal += termList.size
                         progress()
                     }
 
@@ -206,26 +208,29 @@ class DictionaryImporter(
                     var termMetaTotal = 0
                     val termMetaCountsByMode = mutableMapOf<String, Int>()
                     for (entry in termMetaEntries) {
-                        val metaList = zipFile.getInputStream(entry).use { stream ->
-                            readTermMetaBank(stream, dictionaryTitle)
+                        zipFile.getInputStream(entry).use { stream ->
+                            for (chunk in readTermMetaBank(stream, dictionaryTitle).chunked(chunkSize)) {
+                                db.termMetaDao().bulkAdd(chunk)
+                                termMetaTotal += chunk.size
+                                for (m in chunk) termMetaCountsByMode.merge(m.mode, 1, Int::plus)
+                            }
                         }
-                        bulkAdd(metaList) { chunk -> db.termMetaDao().bulkAdd(chunk) }
-                        termMetaTotal += metaList.size
-                        for (m in metaList) termMetaCountsByMode.merge(m.mode, 1, Int::plus)
                         progress()
                     }
 
                     // ── Step 8: kanji banks ───────────────────────────────────────
                     var kanjiTotal = 0
                     for (entry in kanjiEntries) {
-                        val kanjiList = zipFile.getInputStream(entry).use { stream ->
-                            if (version == 1)
+                        zipFile.getInputStream(entry).use { stream ->
+                            val kanjiSequence = if (version == 1)
                                 readKanjiBankV1(stream, dictionaryTitle)
                             else
                                 readKanjiBankV3(stream, dictionaryTitle)
+                            for (chunk in kanjiSequence.chunked(chunkSize)) {
+                                db.kanjiDao().bulkAdd(chunk)
+                                kanjiTotal += chunk.size
+                            }
                         }
-                        bulkAdd(kanjiList) { chunk -> db.kanjiDao().bulkAdd(chunk) }
-                        kanjiTotal += kanjiList.size
                         progress()
                     }
 
@@ -233,16 +238,20 @@ class DictionaryImporter(
                     var kanjiMetaTotal = 0
                     val kanjiMetaCountsByMode = mutableMapOf<String, Int>()
                     for (entry in kanjiMetaEntries) {
-                        val metaList = zipFile.getInputStream(entry).use { stream ->
-                            readKanjiMetaBank(stream, dictionaryTitle)
+                        zipFile.getInputStream(entry).use { stream ->
+                            for (chunk in readKanjiMetaBank(stream, dictionaryTitle).chunked(chunkSize)) {
+                                db.kanjiMetaDao().bulkAdd(chunk)
+                                kanjiMetaTotal += chunk.size
+                                for (m in chunk) kanjiMetaCountsByMode.merge(m.mode, 1, Int::plus)
+                            }
                         }
-                        bulkAdd(metaList) { chunk -> db.kanjiMetaDao().bulkAdd(chunk) }
-                        kanjiMetaTotal += metaList.size
-                        for (m in metaList) kanjiMetaCountsByMode.merge(m.mode, 1, Int::plus)
                         progress()
                     }
 
                     // ── Step 10: tagMeta banks ────────────────────────────────────
+                    // Tag banks are always small (at most a few hundred entries), so unlike
+                    // the other bank types there's no memory reason to stream them - but
+                    // readTagBank still returns a Sequence for API consistency.
                     var tagMetaTotal = 0
                     for (entry in tagEntries) {
                         val tagList = zipFile.getInputStream(entry).use { stream ->
@@ -253,6 +262,15 @@ class DictionaryImporter(
                         bulkAdd(tagList) { chunk -> db.tagMetaDao().bulkAdd(chunk) }
                         tagMetaTotal += tagList.size
                         progress()
+                    }
+                    // If no tag files but index has tagMeta, add them now
+                    if (tagEntries.isEmpty()) {
+                        val tagList = mutableListOf<TagMetaEntity>()
+                        addOldIndexTags(index, tagList, dictionaryTitle)
+                        if (tagList.isNotEmpty()) {
+                            bulkAdd(tagList) { chunk -> db.tagMetaDao().bulkAdd(chunk) }
+                            tagMetaTotal += tagList.size
+                        }
                     }
                     // If no tag files but index has tagMeta, add them now
                     if (tagEntries.isEmpty()) {
@@ -359,6 +377,22 @@ class DictionaryImporter(
         )
     }
 
+    /**
+     * Stream a top-level `[...]` bank file's elements one at a time, instead of parsing the
+     * whole array into memory as a single `JsonElement` tree.
+     *
+     * A frequency-only dictionary's term_meta_bank_1.json can be tens of megabytes containing
+     * hundreds of thousands of tiny 3-element rows; `Json.decodeFromStream<JsonArray>` builds
+     * one boxed `JsonElement` node per array/primitive in the whole file before any row is
+     * even converted to an entity, which can exceed the heap on a real device (observed:
+     * `OutOfMemoryError` importing BCCWJ). `decodeToSequence(..., ARRAY_WRAPPED)` parses and
+     * yields one element at a time, so only the current bulk-insert chunk is ever resident.
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private fun streamJsonArrayElements(inputStream: InputStream): Sequence<JsonElement> {
+        return Json.decodeToSequence<JsonElement>(inputStream, DecodeSequenceMode.ARRAY_WRAPPED)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Term bank parsing
     // ─────────────────────────────────────────────────────────────────────────
@@ -419,15 +453,13 @@ class DictionaryImporter(
      * JS: for (termFile of termFiles) { termList = _readFileSequence([termFile], _convertTermBankEntryV3) }
      *     followed by the glossary object-walk loop.
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun readTermBankV3(
         inputStream: InputStream,
         dictionary: String,
         prefixWildcardsSupported: Boolean,
         requirements: MutableList<ImportRequirement>,
-    ): List<TermEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    ): Sequence<TermEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             val arr = elem.jsonArray
             val expression = arr[0].jsonPrimitive.content
             var reading = arr[1].jsonPrimitive.content
@@ -459,14 +491,12 @@ class DictionaryImporter(
         }
     }
 
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun readTermBankV1(
         inputStream: InputStream,
         dictionary: String,
         prefixWildcardsSupported: Boolean,
-    ): List<TermEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    ): Sequence<TermEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             convertTermBankEntryV1(elem.jsonArray, dictionary, prefixWildcardsSupported)
         }
     }
@@ -630,10 +660,8 @@ class DictionaryImporter(
      *
      * Array: [expression, mode, data]
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private fun readTermMetaBank(inputStream: InputStream, dictionary: String): List<TermMetaEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    private fun readTermMetaBank(inputStream: InputStream, dictionary: String): Sequence<TermMetaEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             val arr = elem.jsonArray
             val expr = arr[0].jsonPrimitive.content
             val mode = arr[1].jsonPrimitive.content
@@ -651,10 +679,8 @@ class DictionaryImporter(
      *
      * V1: [character, onyomi, kunyomi, tags, ...meanings]
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private fun readKanjiBankV1(inputStream: InputStream, dictionary: String): List<KanjiEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    private fun readKanjiBankV1(inputStream: InputStream, dictionary: String): Sequence<KanjiEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             val arr = elem.jsonArray
             val character = arr[0].jsonPrimitive.content
             val onyomi = arr[1].jsonPrimitive.content
@@ -674,10 +700,8 @@ class DictionaryImporter(
      *
      * V3: [character, onyomi, kunyomi, tags, meanings[], stats{}]
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private fun readKanjiBankV3(inputStream: InputStream, dictionary: String): List<KanjiEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    private fun readKanjiBankV3(inputStream: InputStream, dictionary: String): Sequence<KanjiEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             val arr = elem.jsonArray
             val character = arr[0].jsonPrimitive.content
             val onyomi = arr[1].jsonPrimitive.content
@@ -702,10 +726,8 @@ class DictionaryImporter(
      *
      * Array: [character, mode, data]
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private fun readKanjiMetaBank(inputStream: InputStream, dictionary: String): List<KanjiMetaEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    private fun readKanjiMetaBank(inputStream: InputStream, dictionary: String): Sequence<KanjiMetaEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             val arr = elem.jsonArray
             val char = arr[0].jsonPrimitive.content
             val mode = arr[1].jsonPrimitive.content
@@ -723,10 +745,8 @@ class DictionaryImporter(
      *
      * Array: [name, category, order, notes, score]
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private fun readTagBank(inputStream: InputStream, dictionary: String): List<TagMetaEntity> {
-        val root = Json.decodeFromStream<JsonArray>(inputStream)
-        return root.map { elem ->
+    private fun readTagBank(inputStream: InputStream, dictionary: String): Sequence<TagMetaEntity> {
+        return streamJsonArrayElements(inputStream).map { elem ->
             val arr = elem.jsonArray
             val name = arr[0].jsonPrimitive.content
             val category = arr[1].jsonPrimitive.content
