@@ -23,6 +23,15 @@
     <string name="content_description_move_up">Move Up</string>
     <string name="content_description_move_down">Move Down</string>
 
+    <!-- Frequency Sorting Dictionary -->
+    <string name="section_frequency_sorting_dictionary">Frequency sorting dictionary</string>
+    <string name="frequency_sorting_dictionary_description">Sort results using a frequency dictionary.</string>
+    <string name="frequency_sorting_dictionary_none">None</string>
+    <string name="frequency_sorting_mode_label">Frequency sorting mode</string>
+    <string name="frequency_sorting_mode_occurrence_based">Occurrence-based</string>
+    <string name="frequency_sorting_mode_rank_based">Rank-based</string>
+    <string name="frequency_sorting_mode_auto">Auto</string>
+
     <!-- Plural for stats badge -->
     <plurals name="installed_dictionaries_count">
         <item quantity="zero">Installed: %1$d dictionaries</item>
@@ -33,12 +42,22 @@
     <!-- Install Options -->
     <string name="section_install_dictionary">Install Dictionary</string>
     <string name="download_presets_title">Download Presets</string>
+    <string name="preset_category_term">Term Dictionaries</string>
+    <string name="preset_category_kanji">Kanji Dictionaries</string>
+    <string name="preset_category_frequency">Frequency Dictionaries</string>
+
     <string name="preset_jitendex_title">Jitendex (Recommended)</string>
     <string name="preset_jitendex_desc">Modern, beautiful J-E dictionary ~37MB ZIP</string>
     <string name="preset_jmnedict_title">JMnedict</string>
     <string name="preset_jmnedict_desc">Proper nouns, names, and places ~18MB ZIP</string>
-    <string name="preset_kanjidic_title">KANJIDIC English</string>
+    <string name="preset_kanjidic_title">KANJIDIC</string>
     <string name="preset_kanjidic_desc">Lightweight kanji definitions ~5MB ZIP</string>
+    <string name="preset_bccwj_title">BCCWJ</string>
+    <string name="preset_bccwj_desc">Balanced written corpus frequency ~18MB ZIP</string>
+    <string name="preset_jpdb_title">JPDBv2㋕</string>
+    <string name="preset_jpdb_desc">Frequencies based on JPDB corpus ~6MB ZIP</string>
+    <string name="preset_jiten_title">Jiten</string>
+    <string name="preset_jiten_desc">Media stats database frequency ~7MB ZIP</string>
     <string name="content_description_import">Import</string>
     <string name="import_local_zip_title">Import Local ZIP File</string>
     <string name="import_local_zip_desc">Select a downloaded Yomitan zip archive</string>

@@ -50,11 +50,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -101,6 +105,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.MidnightDa
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.MidnightLight
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.NeonRed
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.NeonTeal
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.SoftTeal
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.TextGray
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.TextLightGray
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.ui.theme.TextWhite
@@ -186,7 +191,7 @@ fun YomitanDashboardScreen(
         }
     }
 
-    // Determine if preset Jitendex, JMnedict, and KANJIDIC are already installed based on title
+    // Determine if preset dictionaries are already installed based on title
     val isJitendexInstalled = uiState.installedDictionaries.any {
         it.meta.title.contains("jitendex", ignoreCase = true)
     }
@@ -195,6 +200,15 @@ fun YomitanDashboardScreen(
     }
     val isKanjidicInstalled = uiState.installedDictionaries.any {
         it.meta.title.contains("kanjidic", ignoreCase = true)
+    }
+    val isBccwjInstalled = uiState.installedDictionaries.any {
+        it.meta.title.contains("bccwj", ignoreCase = true)
+    }
+    val isJpdbInstalled = uiState.installedDictionaries.any {
+        it.meta.title.contains("jpdb", ignoreCase = true)
+    }
+    val isJitenInstalled = uiState.installedDictionaries.any {
+        it.meta.title.contains("jiten", ignoreCase = true) && !it.meta.title.contains("jitendex", ignoreCase = true)
     }
 
     Box(
@@ -576,6 +590,25 @@ fun YomitanDashboardScreen(
                 }
             }
 
+            // Frequency Sorting Dictionary Section
+            item {
+                SectionHeader(title = stringResource(R.string.section_frequency_sorting_dictionary))
+            }
+            item {
+                FrequencySortingDictionaryCard(
+                    options = uiState.frequencyDictionaryOptions,
+                    selected = uiState.sortFrequencyDictionary,
+                    order = uiState.sortFrequencyDictionaryOrder,
+                    onSelect = viewModel::setSortFrequencyDictionary,
+                    onOrderSelect = viewModel::setSortFrequencyDictionaryOrder,
+                    onAutoDetect = {
+                        if (uiState.sortFrequencyDictionary.isNotEmpty()) {
+                            viewModel.detectAndApplySortOrder(uiState.sortFrequencyDictionary)
+                        }
+                    }
+                )
+            }
+
             // Install Section Header
             item {
                 SectionHeader(title = stringResource(R.string.section_install_dictionary))
@@ -598,8 +631,11 @@ fun YomitanDashboardScreen(
                             color = TextWhite,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            modifier = Modifier.padding(bottom = 2.dp)
                         )
+
+                        // Term Dictionaries
+                        PresetCategoryHeader(title = stringResource(R.string.preset_category_term))
 
                         PresetRow(
                             title = stringResource(R.string.preset_jitendex_title),
@@ -619,12 +655,45 @@ fun YomitanDashboardScreen(
                             }
                         )
 
+                        // Kanji Dictionaries
+                        PresetCategoryHeader(title = stringResource(R.string.preset_category_kanji))
+
                         PresetRow(
                             title = stringResource(R.string.preset_kanjidic_title),
                             description = stringResource(R.string.preset_kanjidic_desc),
                             isInstalled = isKanjidicInstalled,
                             onDownload = {
-                                viewModel.downloadAndInstallPreset(MainViewModel.PRESETS_KANJIDIC, "KANJIDIC English")
+                                viewModel.downloadAndInstallPreset(MainViewModel.PRESETS_KANJIDIC, "KANJIDIC")
+                            }
+                        )
+
+                        // Frequency Dictionaries
+                        PresetCategoryHeader(title = stringResource(R.string.preset_category_frequency))
+
+                        PresetRow(
+                            title = stringResource(R.string.preset_bccwj_title),
+                            description = stringResource(R.string.preset_bccwj_desc),
+                            isInstalled = isBccwjInstalled,
+                            onDownload = {
+                                viewModel.downloadAndInstallPreset(MainViewModel.PRESETS_BCCWJ, "BCCWJ")
+                            }
+                        )
+
+                        PresetRow(
+                            title = stringResource(R.string.preset_jpdb_title),
+                            description = stringResource(R.string.preset_jpdb_desc),
+                            isInstalled = isJpdbInstalled,
+                            onDownload = {
+                                viewModel.downloadAndInstallPreset(MainViewModel.PRESETS_JPDB, "JPDBv2㋕")
+                            }
+                        )
+
+                        PresetRow(
+                            title = stringResource(R.string.preset_jiten_title),
+                            description = stringResource(R.string.preset_jiten_desc),
+                            isInstalled = isJitenInstalled,
+                            onDownload = {
+                                viewModel.downloadAndInstallPreset(MainViewModel.PRESETS_JITEN, "Jiten")
                             }
                         )
                     }
@@ -1067,6 +1136,188 @@ fun PresetRow(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+@Composable
+fun PresetCategoryHeader(title: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(14.dp)
+                .background(NeonTeal, RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            color = SoftTeal,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.5.sp
+        )
+    }
+}
+
+/**
+ * "Frequency sorting dictionary" picker, matching yomitan's own settings page
+ * (settings.html #sort-frequency-dictionary / #sort-frequency-dictionary-order): a dropdown
+ * of installed frequency dictionaries defaulting to "None" (no frequency-based sorting),
+ * plus a sort-direction dropdown with an "Auto" detect button that only appears once a
+ * dictionary is selected.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FrequencySortingDictionaryCard(
+    options: List<String>,
+    selected: String,
+    order: String,
+    onSelect: (String) -> Unit,
+    onOrderSelect: (String) -> Unit,
+    onAutoDetect: () -> Unit
+) {
+    var dictionaryMenuExpanded by remember { mutableStateOf(false) }
+    var orderMenuExpanded by remember { mutableStateOf(false) }
+    val noneLabel = stringResource(R.string.frequency_sorting_dictionary_none)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = GlassSurface),
+        border = BorderStroke(1.dp, Color(0x1FFFFFFF))
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.frequency_sorting_dictionary_description),
+                    color = TextGray,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = dictionaryMenuExpanded,
+                    onExpandedChange = { dictionaryMenuExpanded = it },
+                    modifier = Modifier.width(160.dp)
+                ) {
+                    OutlinedTextField(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                        readOnly = true,
+                        singleLine = true,
+                        value = selected.ifEmpty { noneLabel },
+                        onValueChange = {},
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dictionaryMenuExpanded) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite,
+                            focusedBorderColor = NeonTeal,
+                            unfocusedBorderColor = Color(0x44FFFFFF)
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = dictionaryMenuExpanded,
+                        onDismissRequest = { dictionaryMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(noneLabel) },
+                            onClick = {
+                                onSelect("")
+                                dictionaryMenuExpanded = false
+                            }
+                        )
+                        for (option in options) {
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    onSelect(option)
+                                    dictionaryMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (selected.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.frequency_sorting_mode_label),
+                        color = TextGray,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    TextButton(onClick = onAutoDetect) {
+                        Text(stringResource(R.string.frequency_sorting_mode_auto), color = NeonTeal)
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = orderMenuExpanded,
+                        onExpandedChange = { orderMenuExpanded = it },
+                        modifier = Modifier.width(160.dp)
+                    ) {
+                        val orderLabel = if (order == "ascending") {
+                            stringResource(R.string.frequency_sorting_mode_rank_based)
+                        } else {
+                            stringResource(R.string.frequency_sorting_mode_occurrence_based)
+                        }
+                        OutlinedTextField(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                            readOnly = true,
+                            singleLine = true,
+                            value = orderLabel,
+                            onValueChange = {},
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = orderMenuExpanded) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedBorderColor = NeonTeal,
+                                unfocusedBorderColor = Color(0x44FFFFFF)
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = orderMenuExpanded,
+                            onDismissRequest = { orderMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.frequency_sorting_mode_occurrence_based)) },
+                                onClick = {
+                                    onOrderSelect("descending")
+                                    orderMenuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.frequency_sorting_mode_rank_based)) },
+                                onClick = {
+                                    onOrderSelect("ascending")
+                                    orderMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermMetaEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -335,5 +336,145 @@ class MainViewModelTest {
         assertEquals(true, uiStateReloaded.activeDictionaries.contains("Dict B"))
         assertEquals(false, uiStateReloaded.activeDictionaries.contains("Dict A"))
         assertEquals(true, uiStateReloaded.activeDictionaries.contains("Dict C")) // Active by default!
+    }
+
+    private suspend fun waitForLoaded(viewModel: MainViewModel) {
+        var uiState = viewModel.uiState.value
+        var attempts = 0
+        while (uiState.isLoading && attempts < 100) {
+            delay(50.milliseconds)
+            uiState = viewModel.uiState.value
+            attempts++
+        }
+    }
+
+    @Test
+    fun testFrequencyDictionaryOptionsOnlyIncludesDictionariesWithFrequencyData() = runBlocking {
+        val termDict = DictionaryEntity(
+            title = "Term Dict", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":100},"termMeta":{"total":0},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        val freqDict = DictionaryEntity(
+            title = "Freq Dict", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":10,"freq":10},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        withContext(Dispatchers.IO) {
+            db.dictionaryDao().insertDictionary(termDict)
+            db.dictionaryDao().insertDictionary(freqDict)
+        }
+
+        val viewModel = MainViewModel(app)
+        waitForLoaded(viewModel)
+
+        assertEquals(listOf("Freq Dict"), viewModel.uiState.value.frequencyDictionaryOptions)
+    }
+
+    @Test
+    fun testSetSortFrequencyDictionaryToNoneClearsPreference() = runBlocking {
+        val freqDict = DictionaryEntity(
+            title = "Freq Dict", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":10,"freq":10},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        withContext(Dispatchers.IO) {
+            db.dictionaryDao().insertDictionary(freqDict)
+        }
+
+        val viewModel = MainViewModel(app)
+        waitForLoaded(viewModel)
+
+        viewModel.setSortFrequencyDictionary("Freq Dict")
+        assertEquals("Freq Dict", viewModel.uiState.value.sortFrequencyDictionary)
+
+        viewModel.setSortFrequencyDictionary("")
+        assertEquals("", viewModel.uiState.value.sortFrequencyDictionary)
+
+        val prefs = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        assertEquals("", prefs.getString("sort_frequency_dictionary", ""))
+    }
+
+    @Test
+    fun testSetSortFrequencyDictionaryAutoDetectsOccurrenceBasedOrder() = runBlocking {
+        val freqDict = DictionaryEntity(
+            title = "Occurrence Dict", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":10,"freq":10},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        withContext(Dispatchers.IO) {
+            db.dictionaryDao().insertDictionary(freqDict)
+            // Common words get LARGE raw values, rare words get SMALL raw values ->
+            // occurrence-based data (larger = more common) -> descending.
+            db.termMetaDao().bulkAdd(
+                listOf(
+                    TermMetaEntity(dictionary = "Occurrence Dict", expression = "来る", mode = "freq", data = "50000"),
+                    TermMetaEntity(dictionary = "Occurrence Dict", expression = "言う", mode = "freq", data = "48000"),
+                    TermMetaEntity(dictionary = "Occurrence Dict", expression = "猫", mode = "freq", data = "3"),
+                    TermMetaEntity(dictionary = "Occurrence Dict", expression = "犬", mode = "freq", data = "2")
+                )
+            )
+        }
+
+        val viewModel = MainViewModel(app)
+        waitForLoaded(viewModel)
+
+        viewModel.setSortFrequencyDictionary("Occurrence Dict")
+
+        // Poll the actual pref write (starts unset), not the uiState field - its default
+        // value ("descending") would otherwise make this loop exit before detection runs.
+        val prefs = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        var detected = prefs.getString("sort_frequency_dictionary_order", "")
+        var attempts = 0
+        while (detected.isNullOrEmpty() && attempts < 100) {
+            delay(50.milliseconds)
+            detected = prefs.getString("sort_frequency_dictionary_order", "")
+            attempts++
+        }
+
+        assertEquals("descending", detected)
+        assertEquals("descending", viewModel.uiState.value.sortFrequencyDictionaryOrder)
+    }
+
+    @Test
+    fun testSetSortFrequencyDictionaryAutoDetectsRankBasedOrder() = runBlocking {
+        val freqDict = DictionaryEntity(
+            title = "Rank Dict", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":10,"freq":10},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        withContext(Dispatchers.IO) {
+            db.dictionaryDao().insertDictionary(freqDict)
+            // Common words get SMALL raw values (better ranks), rare words get LARGE raw
+            // values -> rank-based data (smaller = more common) -> ascending.
+            db.termMetaDao().bulkAdd(
+                listOf(
+                    TermMetaEntity(dictionary = "Rank Dict", expression = "来る", mode = "freq", data = "5"),
+                    TermMetaEntity(dictionary = "Rank Dict", expression = "言う", mode = "freq", data = "3"),
+                    TermMetaEntity(dictionary = "Rank Dict", expression = "猫", mode = "freq", data = "48000"),
+                    TermMetaEntity(dictionary = "Rank Dict", expression = "犬", mode = "freq", data = "50000")
+                )
+            )
+        }
+
+        val viewModel = MainViewModel(app)
+        waitForLoaded(viewModel)
+
+        viewModel.setSortFrequencyDictionary("Rank Dict")
+
+        var uiState = viewModel.uiState.value
+        var attempts = 0
+        while (uiState.sortFrequencyDictionaryOrder != "ascending" && attempts < 100) {
+            delay(50.milliseconds)
+            uiState = viewModel.uiState.value
+            attempts++
+        }
+
+        assertEquals("ascending", uiState.sortFrequencyDictionaryOrder)
     }
 }

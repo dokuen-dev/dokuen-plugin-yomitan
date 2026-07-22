@@ -12,6 +12,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.importer.AndroidMediaLoader
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.importer.DictionaryImporter
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.importer.ImportDetails
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.FrequencyUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,12 @@ data class MainUiState(
     val activeDictionaries: Set<String> = emptySet(),
     val isLoading: Boolean = true,
     val progressState: ProgressState? = null,
-    val errorDialogState: ErrorDialogState? = null
+    val errorDialogState: ErrorDialogState? = null,
+    /** Installed dictionaries that actually contain frequency data, for the sort-dictionary picker. */
+    val frequencyDictionaryOptions: List<String> = emptyList(),
+    /** Empty string means "None" (no frequency-based sorting), matching yomitan's own default. */
+    val sortFrequencyDictionary: String = "",
+    val sortFrequencyDictionaryOrder: String = "descending"
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -61,9 +67,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val TAG = "MainViewModel"
         const val PRESETS_JITENDEX =
             "https://github.com/stephenmk/stephenmk.github.io/releases/latest/download/jitendex-yomitan.zip"
-        const val PRESETS_JMNEDICT = "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/jmnedict.zip"
+        const val PRESETS_JMNEDICT =
+            "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/JMnedict.zip"
         const val PRESETS_KANJIDIC =
-            "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/kanjidic_english.zip"
+            "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/KANJIDIC_english.zip"
+        const val PRESETS_BCCWJ =
+            "https://github.com/Kuuuube/yomitan-dictionaries/releases/download/yomitan-permalink/BCCWJ_SUW_LUW_combined.zip"
+        const val PRESETS_JPDB =
+            "https://github.com/Kuuuube/yomitan-dictionaries/releases/download/yomitan-permalink/JPDB_v2.2_Frequency_Kana.zip"
+        const val PRESETS_JITEN =
+            "https://api.jiten.moe/api/frequency-list/download?downloadType=yomitan"
     }
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -167,11 +180,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     prefs.edit { putString("active_dictionaries", newJoined) }
                 }
 
+                val freqOptions = results
+                    .filter { FrequencyUtil.hasFrequencyData(it.meta.counts) }
+                    .map { it.meta.title }
+
+                var sortFreqDict = prefs.getString("sort_frequency_dictionary", "") ?: ""
+                if (sortFreqDict.isNotEmpty() && sortFreqDict !in freqOptions) {
+                    // The chosen dictionary was deleted or no longer has frequency data.
+                    sortFreqDict = ""
+                    prefs.edit { putString("sort_frequency_dictionary", "") }
+                }
+                val sortFreqOrder = prefs.getString("sort_frequency_dictionary_order", "descending") ?: "descending"
+
                 _uiState.update {
                     it.copy(
                         installedDictionaries = results,
                         activeDictionaries = activeSet,
-                        isLoading = false
+                        isLoading = false,
+                        frequencyDictionaryOptions = freqOptions,
+                        sortFrequencyDictionary = sortFreqDict,
+                        sortFrequencyDictionaryOrder = sortFreqOrder
                     )
                 }
             } catch (e: Exception) {
@@ -224,6 +252,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val joined = currentActive.joinToString(",")
         prefs.edit { putString("active_dictionaries", joined) }
         _uiState.update { it.copy(activeDictionaries = currentActive) }
+    }
+
+    /**
+     * Set (or clear, with an empty string) the "Frequency sorting dictionary" - the single
+     * dictionary term lookups are sorted by, matching yomitan's own
+     * general.sortFrequencyDictionary setting. Selecting a dictionary immediately re-runs
+     * yomitan's auto-detect heuristic to guess the sort direction (see
+     * [detectAndApplySortOrder]), the same as picking a dictionary in yomitan's settings page
+     * does automatically.
+     */
+    fun setSortFrequencyDictionary(title: String) {
+        val prefs = getApplication<Application>().getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        prefs.edit { putString("sort_frequency_dictionary", title) }
+        _uiState.update { it.copy(sortFrequencyDictionary = title) }
+        if (title.isNotEmpty()) {
+            detectAndApplySortOrder(title)
+        }
+    }
+
+    /** Manually override the sort direction (bypassing/replacing the auto-detected value). */
+    fun setSortFrequencyDictionaryOrder(order: String) {
+        val prefs = getApplication<Application>().getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        prefs.edit { putString("sort_frequency_dictionary_order", order) }
+        _uiState.update { it.copy(sortFrequencyDictionaryOrder = order) }
+    }
+
+    /**
+     * Re-run yomitan's auto-detect heuristic for [dictionary] and apply the result if it
+     * gives a clear signal.
+     *
+     * Mirrors ext/js/pages/settings/sort-frequency-dictionary-controller.js's
+     * `_autoUpdateOrder`/`_getFrequencyOrder` exactly: look up a handful of known-common and
+     * known-rare Japanese words in this one dictionary, and infer occurrence-based
+     * (descending) vs rank-based (ascending) from whether the common words' raw values are
+     * larger or smaller than the rare words'. A sign of 0 (ambiguous / no data) leaves the
+     * current order untouched, exactly as yomitan does.
+     */
+    fun detectAndApplySortOrder(dictionary: String) {
+        viewModelScope.launch {
+            val sign = withContext(Dispatchers.IO) {
+                val dao = AppDatabase.getDatabase(getApplication()).termMetaDao()
+                val allTerms = FrequencyUtil.MORE_COMMON_JAPANESE_TERMS + FrequencyUtil.LESS_COMMON_JAPANESE_TERMS
+                val metas = dao.findByExpressionBulk(allTerms, listOf(dictionary)).filter { it.mode == "freq" }
+                val valuesByTerm = metas.groupBy({ it.expression }) { meta ->
+                    FrequencyUtil.parseFrequency(meta.data, meta.expression).frequency
+                }
+                val moreCommonValues = FrequencyUtil.MORE_COMMON_JAPANESE_TERMS.map { valuesByTerm[it] ?: emptyList() }
+                val lessCommonValues = FrequencyUtil.LESS_COMMON_JAPANESE_TERMS.map { valuesByTerm[it] ?: emptyList() }
+                FrequencyUtil.detectFrequencyOrderSign(moreCommonValues, lessCommonValues)
+            }
+            if (sign == 0) return@launch
+            setSortFrequencyDictionaryOrder(if (sign > 0) "descending" else "ascending")
+        }
     }
 
     fun deleteDictionary(meta: DictionaryEntity) {
