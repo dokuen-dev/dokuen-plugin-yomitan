@@ -253,40 +253,7 @@ class TermEntryRenderer(
 
         // Filter termMeta to only frequency entries
         val frequencyEntries = termMetaList.filter { it.mode == "freq" }
-
-        if (frequencyEntries.isNotEmpty()) {
-            // Group frequencies by dictionary
-            val frequenciesByDict = frequencyEntries.groupBy { it.dictionary }
-
-            // Render each dictionary's frequencies
-            for ((dictionary, frequencies) in frequenciesByDict) {
-                // Add space before dictionary badge if this isn't the first content
-                if (spanGenerator.getCurrentIndex() > 0) {
-                    spanGenerator.appendText(" ")
-                }
-
-                TagRenderer.appendFrequencyBadge(dictionary, spanGenerator)
-
-                // Append colon separator
-                spanGenerator.appendText(": ")
-
-                // Render each frequency value
-                val freqValues = mutableListOf<String>()
-                for (freqMeta in frequencies) {
-                    val freqValue = parseFrequencyData(freqMeta.data, termEntity.expression, termEntity.reading)
-                    freqValues.add(freqValue)
-                }
-
-                // Join frequency values with commas
-                spanGenerator.appendText(freqValues.joinToString(", "))
-
-                // Add space after this dictionary's frequencies
-                spanGenerator.appendText(" ")
-            }
-
-            // Add newline after frequencies section
-            spanGenerator.newline()
-        }
+        appendFrequencySection(frequencyEntries, termEntity.expression, termEntity.reading)
 
         // Render definitions using StructuredContentRenderer
         // Parse glossary JSON array from TermEntity
@@ -479,27 +446,7 @@ class TermEntryRenderer(
 
         // Frequencies section
         val frequencyEntries = termMetaList.filter { it.mode == "freq" }
-        if (frequencyEntries.isNotEmpty()) {
-            val frequenciesByDict = frequencyEntries.groupBy { it.dictionary }
-            var freqIdx = 0
-            for ((dictionary, frequencies) in frequenciesByDict) {
-                if (spanGenerator.getCurrentIndex() > 0) {
-                    spanGenerator.appendText(" ")
-                }
-                TagRenderer.appendFrequencyBadge(dictionary, spanGenerator)
-                spanGenerator.appendText(": ")
-
-                val freqValues = frequencies.map { freqMeta ->
-                    parseFrequencyData(freqMeta.data, primaryTerm.expression, primaryTerm.reading)
-                }
-                spanGenerator.appendText(freqValues.joinToString(", "))
-                if (freqIdx < frequenciesByDict.size - 1) {
-                    spanGenerator.appendText(" ")
-                }
-                freqIdx++
-            }
-            spanGenerator.newline()
-        }
+        appendFrequencySection(frequencyEntries, primaryTerm.expression, primaryTerm.reading)
 
         // Definitions loop for each term entity in the group
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
@@ -673,94 +620,45 @@ class TermEntryRenderer(
     }
 
     /**
-     * Parse frequency data from TermMetaEntity.data JSON field.
+     * Render the frequency section: one badge per dictionary that has frequency data for
+     * this headword.
      *
-     * The frequency data can be in several formats:
-     * - Simple number: 1
-     * - Simple string: "four"
-     * - Object with value: {"value": 6}
-     * - Object with value and displayValue: {"value": 7, "displayValue": "seven"}
-     * - Object with reading and frequency: {"reading": "だ", "frequency": 8}
-     * - Object with reading and frequency string: {"reading": "だ", "frequency": "fourteen"}
-     * - Object with reading and frequency object: {"reading": "だ", "frequency": {"value": 26, "displayValue": "twenty-seven"}}
-     *
-     * Reference: yomitan/test/data/dictionaries/valid-dictionary1/term_meta_bank_1.json
-     * Reference: yomitan/ext/js/display/display-generator.js::_createTermFrequency
-     *
-     * @param jsonData The JSON string from TermMetaEntity.data
-     * @param expression The term expression for disambiguation
-     * @param reading The term reading for disambiguation
-     * @return Formatted frequency string
+     * yomitan also supports an "Average" pseudo-dictionary badge (harmonic mean across every
+     * active frequency dictionary, dictionary-data-util.js's groupTermFrequencies), but it is
+     * gated behind `options.general.averageFrequency`, which defaults to **false** - and when
+     * on, it *replaces* the individual badges rather than joining them
+     * (display.css: `[data-average-frequency=true] .frequency-group-item:not([data-details='Average'])
+     * { display: none; }`). This app has no such setting, so only the default (off) behavior
+     * - individual per-dictionary badges, no Average - is implemented.
      */
-    private fun parseFrequencyData(jsonData: String, expression: String, reading: String): String {
-        return try {
-            // Parse JSON
-            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-            when (val element = json.parseToJsonElement(jsonData)) {
-                // Simple number
-                is kotlinx.serialization.json.JsonPrimitive if element.isString.not() -> {
-                    element.content
-                }
-                // Simple string
-                is kotlinx.serialization.json.JsonPrimitive if element.isString -> {
-                    element.content
-                }
-                // Object
-                is kotlinx.serialization.json.JsonObject -> {
-                    // Check if it has a "reading" field (reading-specific frequency)
-                    val freqReading = element["reading"]?.let {
-                        if (it is kotlinx.serialization.json.JsonPrimitive) it.content else null
-                    }
+    private fun appendFrequencySection(frequencyEntries: List<TermMetaEntity>, expression: String, reading: String) {
+        if (frequencyEntries.isEmpty()) return
 
-                    // Get the frequency value
-                    val freqValue = when {
-                        // frequency can be number, string, or object
-                        element.containsKey("frequency") -> {
-                            when (val freq = element["frequency"]!!) {
-                                is kotlinx.serialization.json.JsonPrimitive if freq.isString.not() -> freq.content
-                                is kotlinx.serialization.json.JsonPrimitive if freq.isString -> freq.content
-                                is kotlinx.serialization.json.JsonObject -> {
-                                    // frequency is an object with value/displayValue
-                                    val displayValue = freq["displayValue"]?.let {
-                                        if (it is kotlinx.serialization.json.JsonPrimitive) it.content else null
-                                    }
-                                    val value = freq["value"]?.let {
-                                        if (it is kotlinx.serialization.json.JsonPrimitive) it.content else null
-                                    }
-                                    displayValue ?: value ?: "?"
-                                }
-
-                                else -> "?"
-                            }
-                        }
-                        // value field (simple format)
-                        element.containsKey("value") -> {
-                            val displayValue = element["displayValue"]?.let {
-                                if (it is kotlinx.serialization.json.JsonPrimitive) it.content else null
-                            }
-                            val value = element["value"]?.let {
-                                if (it is kotlinx.serialization.json.JsonPrimitive) it.content else null
-                            }
-                            displayValue ?: value ?: "?"
-                        }
-
-                        else -> "?"
-                    }
-
-                    // Format output with reading disambiguation if needed
-                    if (freqReading != null && freqReading != reading) {
-                        "$expression[$freqReading]: $freqValue"
-                    } else {
-                        freqValue
-                    }
-                }
-
-                else -> "?"
-            }
-        } catch (_: Exception) {
-            // If JSON parsing fails, return placeholder
-            "?"
+        val rawFrequencies = frequencyEntries.map { meta ->
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.RawFrequency(
+                dictionary = meta.dictionary,
+                jsonData = meta.data,
+                expression = expression,
+                reading = reading
+            )
         }
+        val groupedBadges =
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.FrequencyUtil.groupFrequencies(
+                rawFrequencies,
+                expression,
+                reading
+            )
+
+        for (badge in groupedBadges) {
+            if (spanGenerator.getCurrentIndex() > 0) {
+                spanGenerator.appendText(" ")
+            }
+
+            TagRenderer.appendFrequencyBadge(badge.dictionary, spanGenerator)
+            TagRenderer.appendFrequencyValueBadge(badge.values.joinToString(", "), spanGenerator)
+        }
+
+        spanGenerator.newline()
     }
 
     /**

@@ -198,14 +198,16 @@ class YomitanRenderer(
      */
     suspend fun renderTermEntry(
         termEntity: TermEntity,
-        dictionaryStyles: String
+        dictionaryStyles: String,
+        activeDictionaries: List<String>
     ): DictionaryEntry {
-        return renderTermEntries(listOf(termEntity), dictionaryStyles)
+        return renderTermEntries(listOf(termEntity), dictionaryStyles, activeDictionaries)
     }
 
     suspend fun renderTermEntries(
         termEntities: List<TermEntity>,
-        dictionaryStyles: String
+        dictionaryStyles: String,
+        activeDictionaries: List<String>
     ): DictionaryEntry {
         if (termEntities.isEmpty()) {
             return DictionaryEntry("", null, null, StyledText("", null, null, null))
@@ -223,12 +225,15 @@ class YomitanRenderer(
             emptyList()
         }
 
-        // Fetch term metadata for frequency information (using union of expressions in the group)
+        // Fetch term metadata for frequency information. Frequency dictionaries are
+        // standalone (no term_bank of their own), so their term_meta rows live under a
+        // different dictionary title than this term's own - query across every active
+        // dictionary, not just firstEntity.dictionary.
         val expressions = termEntities.map { it.expression }.distinct()
         val termMetaList = try {
             database.termMetaDao().findByExpressionBulk(
                 termList = expressions,
-                dictionaries = listOf(firstEntity.dictionary)
+                dictionaries = activeDictionaries
             )
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load term metadata for '${expressions}'", e)
@@ -303,7 +308,8 @@ class YomitanRenderer(
      */
     suspend fun renderKanjiEntry(
         kanjiEntity: KanjiEntity,
-        dictionaryStyles: String
+        dictionaryStyles: String,
+        activeDictionaries: List<String>
     ): DictionaryEntry {
         // Load and cache CSS rules for this dictionary
         loadAndCacheCss(kanjiEntity.dictionary, dictionaryStyles)
@@ -313,6 +319,18 @@ class YomitanRenderer(
             database.tagMetaDao().findAllForDictionary(kanjiEntity.dictionary)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load tag metadata for dictionary '${kanjiEntity.dictionary}'", e)
+            emptyList()
+        }
+
+        // Fetch kanji metadata for frequency information. Frequency dictionaries are
+        // standalone, so query across every active dictionary, not just kanjiEntity.dictionary.
+        val kanjiMetaList = try {
+            database.kanjiMetaDao().findByCharacterBulk(
+                characters = listOf(kanjiEntity.character),
+                dictionaries = activeDictionaries
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to load kanji metadata for character '${kanjiEntity.character}'", e)
             emptyList()
         }
 
@@ -334,7 +352,7 @@ class YomitanRenderer(
 
         // Delegate to KanjiEntryRenderer for fixed template rendering
         return try {
-            kanjiEntryRenderer.render(kanjiEntity, tagMetaList, dictionaryEntity)
+            kanjiEntryRenderer.render(kanjiEntity, tagMetaList, kanjiMetaList, dictionaryEntity)
         } catch (e: Exception) {
             // Wrap any rendering errors with diagnostic information
             throw RenderingException(

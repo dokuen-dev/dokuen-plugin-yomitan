@@ -367,12 +367,14 @@ class TermEntryRendererTest {
         assertTrue("Body should contain dictionary name 'test-dictionary'", bodyText.contains("test-dictionary"))
         assertTrue("Body should contain frequency value '1'", bodyText.contains("1"))
 
-        // Verify dictionary badge styling
-        val dictionaryColor = 0xFFAA66CC.toInt()  // Purple color for dictionary category
-        val hasDictionaryBadge = result.body.styledSpans.any {
-            it.style.textBackgroundColor == dictionaryColor
+        // Verify frequency badge styling - yomitan's CSS uses a distinct green for the
+        // "frequency" tag category (`--tag-frequency-background-color`), not the dictionary
+        // badge's purple.
+        val frequencyColor = 0xFF5CB85C.toInt()
+        val hasFrequencyBadge = result.body.styledSpans.any {
+            it.style.textBackgroundColor == frequencyColor
         }
-        assertTrue("Should have dictionary badge with purple color", hasDictionaryBadge)
+        assertTrue("Should have frequency badge with green color", hasFrequencyBadge)
     }
 
     @Test
@@ -513,7 +515,7 @@ class TermEntryRendererTest {
     }
 
     @Test
-    fun `render handles frequency with different reading for disambiguation`() {
+    fun `render excludes frequency data for a mismatched reading of the same expression`() {
         // Setup
         val cssProcessor = CssProcessor()
         val spanGenerator = SpanGenerator()
@@ -540,13 +542,14 @@ class TermEntryRendererTest {
         // Execute
         val result = renderer.render(termEntity, tagMetaList, termMetaList)
 
-        // Verify
+        // Verify: this term_meta row belongs to a different headword (行く read ゆく), not
+        // to 行く read いく, so it must not appear under this entry at all - mirroring
+        // yomitan/translator.js: `if (hasReading && data.reading !== reading) { continue; }`.
         assertNotNull("Result should not be null", result)
         val bodyText = result.body.text
-        // Should show disambiguation: 行く[ゆく]: 10
         assertTrue(
-            "Body should contain expression with reading disambiguation",
-            bodyText.contains("行く[ゆく]") || bodyText.contains("行く[ゆく]: 10")
+            "Body should not render a frequency badge for the mismatched reading ゆく",
+            !bodyText.contains("freq-dict") && !bodyText.contains("ゆく")
         )
     }
 
@@ -641,12 +644,40 @@ class TermEntryRendererTest {
         )
         assertTrue("Body should contain frequency '10' for dict-b", bodyText.contains("10"))
 
-        // Verify multiple dictionary badges exist
-        val dictionaryColor = 0xFFAA66CC.toInt()
-        val dictionaryBadges = result.body.styledSpans.filter {
-            it.style.textBackgroundColor == dictionaryColor
+        // Verify multiple frequency badges exist (green, not dictionary-badge purple)
+        val frequencyColor = 0xFF5CB85C.toInt()
+        val frequencyBadges = result.body.styledSpans.filter {
+            it.style.textBackgroundColor == frequencyColor
         }
-        assertTrue("Should have at least 2 dictionary badges", dictionaryBadges.size >= 2)
+        assertTrue("Should have at least 2 frequency badges", frequencyBadges.size >= 2)
+    }
+
+    @Test
+    fun `render does not append an Average badge`() {
+        // yomitan's groupTermFrequencies computes a synthetic "Average" pseudo-dictionary
+        // entry (harmonic mean across every active frequency dictionary), but display.css
+        // only shows it when `options.general.averageFrequency` is true - and that option
+        // defaults to **false** (options-util.js), in which case only the individual
+        // per-dictionary badges show and the Average entry is hidden. This app has no
+        // settings toggle for that option, so only the default (no Average) behavior applies.
+        val cssProcessor = CssProcessor()
+        val spanGenerator = SpanGenerator()
+        val structuredContentRenderer = StructuredContentRenderer(cssProcessor, spanGenerator)
+        val renderer = TermEntryRenderer(structuredContentRenderer, spanGenerator)
+
+        val termEntity = createTestTermEntity(
+            expression = "走る",
+            reading = "はしる"
+        )
+
+        val termMetaList = listOf(
+            TermMetaEntity(id = 1, dictionary = "dict-a", expression = "走る", mode = "freq", data = "1"),
+            TermMetaEntity(id = 2, dictionary = "dict-b", expression = "走る", mode = "freq", data = "10")
+        )
+
+        val result = renderer.render(termEntity, emptyList(), termMetaList)
+
+        assertFalse("Body should not contain an 'Average' badge", result.body.text.contains("Average"))
     }
 
     @Test

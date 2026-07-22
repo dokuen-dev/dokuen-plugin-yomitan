@@ -2,8 +2,6 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer
 
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TagMetaEntity
-import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.TagRenderer.appendTagBadge
-import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.TagRenderer.getCategoryColor
 import io.github.dokuendev.dokuenreader.dictionary.InlineStyle
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.intOrNull
@@ -158,29 +156,47 @@ object TagRenderer {
     }
 
     /**
-     * Append an unpadded frequency source badge (dictionary name only, no spaces) and
-     * register the corresponding [InlineStyle] span.
-     *
-     * Frequency badges differ from tag badges in two ways:
-     * - No space-padding around the label (the caller appends ": " after)
-     * - Always dictionary-purple (0xFFAA66CC), no hover text
+     * Append a frequency dictionary-name badge (" DictName ") - a normal tag badge in the
+     * "frequency" category (solid green background, white text, space-padded), matching
+     * every other badge's convention. Yomitan's CSS uses a distinct green for frequency tags
+     * (`--tag-frequency-background-color`), never the dictionary-badge purple.
      *
      * @param dictionaryName The frequency dictionary name to display
      * @param spanGenerator  The accumulator to write into
      */
     fun appendFrequencyBadge(dictionaryName: String, spanGenerator: SpanGenerator) {
+        appendTagBadge(dictionaryName, getCategoryColor("frequency"), null, spanGenerator)
+    }
+
+    /**
+     * Append a frequency value badge (" values ") paired with a preceding
+     * [appendFrequencyBadge] label.
+     *
+     * Yomitan renders this as an outlined box (transparent background, colored border,
+     * normal text color) directly attached to the solid label box - there is no equivalent
+     * to "outlined box" or "attached boxes" in this renderer's span model, so this
+     * approximates it with a faint tint of the same frequency color (20% opacity) and the
+     * default theme text color, rather than the ": value" separator used previously.
+     *
+     * @param values        The frequency value(s) to display (already comma-joined if multiple)
+     * @param spanGenerator The accumulator to write into
+     */
+    fun appendFrequencyValueBadge(values: String, spanGenerator: SpanGenerator) {
         val start = spanGenerator.getCurrentIndex()
-        spanGenerator.appendText(dictionaryName)
+        spanGenerator.appendText(" $values ")
         val end = spanGenerator.getCurrentIndex()
+
+        val frequencyColor = getCategoryColor("frequency")
+        val faintBackground = (0x32 shl 24) or (frequencyColor and 0x00FFFFFF) // ~20% opacity
 
         spanGenerator.addStyledSpan(
             start, end,
             InlineStyle(
-                bold = true,
+                bold = false,
                 italic = false,
                 fontSize = 0.8f,
-                foregroundColor = 0xFFFFFFFF.toInt(),
-                textBackgroundColor = 0xFFAA66CC.toInt(), // Dictionary purple
+                foregroundColor = 0, // default theme text color
+                textBackgroundColor = faintBackground,
                 hoverText = null,
                 linkUrl = null
             )

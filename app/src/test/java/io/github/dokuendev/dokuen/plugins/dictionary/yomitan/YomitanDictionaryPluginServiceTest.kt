@@ -1,12 +1,14 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermEntity
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermMetaEntity
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryException
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
 import kotlinx.coroutines.Dispatchers
@@ -474,7 +476,7 @@ class YomitanDictionaryPluginServiceTest {
     fun testKanjiLinkLookupReturnsNotFoundWhenKanjiDictInstalledButCharacterMissing() {
         // A kanji dictionary IS installed (countKanji > 0) but has no entry for 湯.
         // This is the normal "character not in dictionary" case, which should produce
-        // a WORD_NOT_FOUND exception — the same as any other failed lookup.
+        // a WORD_NOT_FOUND exception, the same as any other failed lookup.
         runBlocking {
             val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
 
@@ -527,7 +529,7 @@ class YomitanDictionaryPluginServiceTest {
             }
             service.onInitialize(config)
 
-            // setUp() inserts only term entries, no kanji entries — so countKanji == 0.
+            // setUp() inserts only term entries, no kanji entries, so countKanji == 0.
             val contextText = "?kanji=湯"
             val result = service.onLookup(contextText, 0, contextText.length)
 
@@ -756,5 +758,73 @@ class YomitanDictionaryPluginServiceTest {
             assertEquals("Hover text should match rule description", expectedHoverText, ruleSpan!!.style.hoverText)
         }
     }
-}
 
+    @Test
+    fun testOnLookupSortsByFrequencyHarmonicScore() = runBlocking {
+        val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+
+        val mainDict = "Main Word Dict"
+        val freqDict = "JPDB Freq Dict"
+
+        withContext(Dispatchers.IO) {
+            db.clearAllTables()
+
+            // Insert dictionaries
+            db.dictionaryDao().insertDictionary(
+                DictionaryEntity(
+                    title = mainDict, revision = "1.0", sequenced = false, version = 3,
+                    importDate = 0L, prefixWildcardsSupported = true, styles = "", counts = null, importSuccess = true
+                )
+            )
+            db.dictionaryDao().insertDictionary(
+                DictionaryEntity(
+                    title = freqDict, revision = "1.0", sequenced = false, version = 3,
+                    importDate = 0L, prefixWildcardsSupported = true, styles = "", counts = null, importSuccess = true,
+                    frequencyMode = "rank-based"
+                )
+            )
+
+            // Insert terms with identical scores in mainDict
+            db.termDao().bulkAdd(
+                listOf(
+                    TermEntity(
+                        dictionary = mainDict, expression = "猫", reading = "ねこ",
+                        definitionTags = null, rules = "", score = 100.0, glossary = "[\"cat\"]",
+                        sequence = 1L, termTags = null
+                    ),
+                    TermEntity(
+                        dictionary = mainDict, expression = "犬", reading = "いぬ",
+                        definitionTags = null, rules = "", score = 100.0, glossary = "[\"dog\"]",
+                        sequence = 2L, termTags = null
+                    )
+                )
+            )
+
+            // Insert frequency meta entries in freqDict: "犬" has higher frequency rank (10), "猫" has lower frequency rank (500)
+            db.termMetaDao().bulkAdd(
+                listOf(
+                    TermMetaEntity(dictionary = freqDict, expression = "犬", mode = "freq", data = "10"),
+                    TermMetaEntity(dictionary = freqDict, expression = "猫", mode = "freq", data = "500")
+                )
+            )
+        }
+
+        // Save active dictionaries in preferences: both mainDict and freqDict enabled
+        val prefs = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("active_dictionaries", "$mainDict,$freqDict").commit()
+
+        val config = Bundle().apply {
+            putString(PluginHostConfigKeys.UI_THEME, "light")
+        }
+        service.onInitialize(config)
+
+        // Look up "犬猫"
+        val result = service.onLookup("犬猫", 0, 1)
+        assertNotNull(result)
+        assertTrue("Lookup results should not be empty", result.entries.isNotEmpty())
+
+        // "犬" (rank 10) should be sorted before "猫" (rank 500)
+        val firstEntryHeadword = result.entries[0].headword
+        assertEquals("犬 should rank higher than 猫 due to frequency score", "犬", firstEntryHeadword)
+    }
+}

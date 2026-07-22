@@ -85,6 +85,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     }
 
     private var activeDictionaryTitles: List<String> = emptyList()
+    private var sortFrequencyDictionary: String = ""
+    private var sortFrequencyDictionaryOrder: String = "descending"
     private var isDarkMode: Boolean = false
     private lateinit var db: AppDatabase
     private lateinit var renderer: YomitanRenderer
@@ -113,6 +115,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             val prefs = applicationContext.getSharedPreferences("yomitan_prefs", MODE_PRIVATE)
             val joined = prefs.getString("active_dictionaries", "") ?: ""
             activeDictionaryTitles = joined.split(",").filter { it.isNotEmpty() }
+            sortFrequencyDictionary = prefs.getString("sort_frequency_dictionary", "") ?: ""
+            sortFrequencyDictionaryOrder =
+                prefs.getString("sort_frequency_dictionary_order", "descending") ?: "descending"
 
             Log.d(
                 TAG,
@@ -182,7 +187,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                         val kanjiEntries = sortedKanjiMatches.map { match ->
                             val dictEntity = db.dictionaryDao().getDictionaryByTitle(match.dictionary)
                             val styles = dictEntity?.styles ?: ""
-                            renderer.renderKanjiEntry(match, styles)
+                            renderer.renderKanjiEntry(match, styles, activeDictionaryTitles)
                         }
                         entries = listOf(mergeDictionaryEntries(kanjiChar, null, null, kanjiEntries))
                     }
@@ -224,13 +229,59 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     private class TermGroup(
         val expression: String,
         val reading: String,
-        val items: MutableList<TermLookupMatch> = mutableListOf()
+        val items: MutableList<TermLookupMatch> = mutableListOf(),
+        // Matches yomitan/translator.js's TermDictionaryEntry.frequencyOrder: defaults to 0
+        // (a no-op sort key) and is only ever populated when the user has explicitly chosen
+        // a frequency sorting dictionary in settings (see populateSortFrequencyOrder).
+        var frequencyOrder: Double = 0.0
     ) {
         val maxMatchedLength: Int get() = items.maxOf { it.matchedLength }
         val minDeinflectionRulesCount: Int get() = items.minOf { it.deinflectionRulesCount }
         val minDictionaryIndex: Int get() = items.minOf { it.dictionaryIndex }
         val maxScore: Double get() = items.maxOf { it.term.score }
         val maxSequence: Long get() = items.maxOf { it.term.sequence ?: -1L }
+    }
+
+    /**
+     * Populate each group's [TermGroup.frequencyOrder] using the single dictionary the user
+     * chose in the "Frequency sorting dictionary" setting, if any.
+     *
+     * Mirrors yomitan/ext/js/language/translator.js's findTerms + _updateSortFrequencies:
+     * frequency-based sorting is opt-in (skipped entirely when no dictionary is chosen, in
+     * which case every group keeps frequencyOrder = 0 and this key is a no-op in the sort
+     * comparator) and, when enabled, uses only that one dictionary's raw values - never a
+     * blend across every active frequency dictionary.
+     */
+    private suspend fun populateSortFrequencyOrder(groups: Collection<TermGroup>) {
+        if (groups.isEmpty() || sortFrequencyDictionary.isEmpty()) return
+
+        val expressions = groups.map { it.expression }.distinct()
+        val metas = try {
+            db.termMetaDao().findByExpressionBulk(expressions, listOf(sortFrequencyDictionary))
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val freqMetas = metas.filter { it.mode == "freq" }
+        val ascending = sortFrequencyDictionaryOrder == "ascending"
+
+        for (group in groups) {
+            val rawFrequencies = freqMetas
+                .filter { it.expression == group.expression }
+                .map {
+                    io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.RawFrequency(
+                        dictionary = it.dictionary,
+                        jsonData = it.data,
+                        expression = group.expression
+                    )
+                }
+            group.frequencyOrder =
+                io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.FrequencyUtil.calculateSortFrequencyOrder(
+                    rawFrequencies,
+                    group.reading,
+                    sortFrequencyDictionary,
+                    ascending
+                )
+        }
     }
 
     private fun mergeDictionaryEntries(
@@ -339,7 +390,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         val kanjiEntries = sortedMatches.map { match ->
             val dictEntity = db.dictionaryDao().getDictionaryByTitle(match.dictionary)
             val styles = dictEntity?.styles ?: ""
-            renderer.renderKanjiEntry(match, styles)
+            renderer.renderKanjiEntry(match, styles, activeDictionaries)
         }
 
         return listOf(mergeDictionaryEntries(character, null, null, kanjiEntries))
@@ -462,8 +513,11 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             group.items.add(lookupMatch)
         }
 
+        populateSortFrequencyOrder(groupsMap.values)
+
         val sortedGroups = groupsMap.values.sortedWith(
-            compareBy<TermGroup> { it.minDictionaryIndex }
+            compareBy<TermGroup> { it.frequencyOrder }
+                .thenBy { it.minDictionaryIndex }
                 .thenByDescending { it.maxScore }
                 .thenByDescending { it.expression.length }
                 .thenBy { it.expression }
@@ -505,7 +559,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 val styles = dictEntity?.styles ?: ""
 
                 val terms = itemGroup.map { it.term }
-                val entry = renderer.renderTermEntries(terms, styles)
+                val entry = renderer.renderTermEntries(terms, styles, activeDictionaries)
 
                 // If deinflection rules were applied, prepend them to the body as a custom badge
                 val finalEntry = if (primaryMatch.deinflectionRules.isNotEmpty()) {
@@ -590,9 +644,12 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             group.items.add(match)
         }
 
+        populateSortFrequencyOrder(groupsMap.values)
+
         val sortedGroups = groupsMap.values.sortedWith(
             compareByDescending<TermGroup> { it.maxMatchedLength }
                 .thenBy { it.minDeinflectionRulesCount }
+                .thenBy { it.frequencyOrder }
                 .thenBy { it.minDictionaryIndex }
                 .thenByDescending { it.maxScore }
                 .thenByDescending { it.expression.length }
@@ -635,7 +692,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 val styles = dictEntity?.styles ?: ""
 
                 val terms = itemGroup.map { it.term }
-                val entry = renderer.renderTermEntries(terms, styles)
+                val entry = renderer.renderTermEntries(terms, styles, activeDictionaries)
 
                 // If deinflection rules were applied, prepend them to the body as a custom badge
                 val finalEntry = if (primaryMatch.deinflectionRules.isNotEmpty()) {

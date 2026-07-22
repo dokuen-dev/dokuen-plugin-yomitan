@@ -134,7 +134,7 @@ object DebugGenerator {
             val yomitanRenderer = createYomitanRenderer(mockDatabase)
 
             val renderedEntries = terms.map { term ->
-                yomitanRenderer.renderTermEntry(term, styles)
+                yomitanRenderer.renderTermEntry(term, styles, listOf(dictionaryTitle))
             }
 
             val jsonOutput = DictionaryEntrySerializer.toJson(renderedEntries)
@@ -178,7 +178,7 @@ object DebugGenerator {
 
             val yomitanRenderer = createYomitanRenderer(mockDatabase)
 
-            val renderedKanji = yomitanRenderer.renderKanjiEntry(kanji, "")
+            val renderedKanji = yomitanRenderer.renderKanjiEntry(kanji, "", listOf("Test Kanji Dictionary"))
 
             val jsonOutput = DictionaryEntrySerializer.toJson(listOf(renderedKanji))
             val outputFile = File(projectRoot, "debug_kanji_entry.json")

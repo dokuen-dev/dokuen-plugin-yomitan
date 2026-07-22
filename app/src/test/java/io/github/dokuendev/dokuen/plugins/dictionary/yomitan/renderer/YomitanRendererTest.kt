@@ -348,7 +348,7 @@ class YomitanRendererTest {
 
         // Execute - this will invoke the full rendering pipeline
         try {
-            val result = renderer.renderTermEntry(termEntity, dictionaryCSS)
+            val result = renderer.renderTermEntry(termEntity, dictionaryCSS, listOf("test-dict"))
 
             // Verify basic structure
             assertNotNull("Result should not be null", result)
@@ -393,7 +393,7 @@ class YomitanRendererTest {
 
         // Execute - this will invoke the full rendering pipeline
         try {
-            val result = renderer.renderKanjiEntry(kanjiEntity, dictionaryCSS)
+            val result = renderer.renderKanjiEntry(kanjiEntity, dictionaryCSS, listOf("test-dict"))
 
             // Verify basic structure
             assertNotNull("Result should not be null", result)
@@ -403,6 +403,56 @@ class YomitanRendererTest {
             // If rendering fails due to setup issues, at least verify mocks were called
             System.err.println("Full rendering test skipped due to: ${e.message}")
         }
+    }
+
+    /**
+     * Frequency dictionaries are standalone: their term_meta rows live under their own
+     * dictionary title, never under the looked-up term's own dictionary. The frequency
+     * query must therefore span every active dictionary, not just the term's own.
+     */
+    @Test
+    fun `renderTermEntry finds frequency data from a separate active frequency dictionary`() = runBlocking {
+        val termEntity = TermEntity(
+            id = 1L,
+            expression = "日本",
+            reading = "にほん",
+            definitionTags = "",
+            rules = "",
+            score = 0.0,
+            glossary = """["Japan"]""",
+            sequence = 0L,
+            termTags = "",
+            dictionary = "test-dict"
+        )
+
+        `when`(mockTagMetaDao.findAllForDictionary("test-dict")).thenReturn(emptyList())
+        `when`(mockTermMetaDao.findByExpressionBulk(any(), any())).thenAnswer { invocation ->
+            @Suppress("UNCHECKED_CAST")
+            val dictionaries = invocation.getArgument<List<String>>(1)
+            if ("Freq Dict" in dictionaries) {
+                listOf(
+                    TermMetaEntity(
+                        dictionary = "Freq Dict",
+                        expression = "日本",
+                        mode = "freq",
+                        data = "150"
+                    )
+                )
+            } else {
+                emptyList()
+            }
+        }
+
+        val result = renderer.renderTermEntry(
+            termEntity,
+            dictionaryStyles = "",
+            activeDictionaries = listOf("test-dict", "Freq Dict")
+        )
+
+        assertTrue(
+            "Body should contain the frequency badge from the separate frequency dictionary",
+            result.body.text.contains("Freq Dict")
+        )
     }
 
     /**
@@ -435,7 +485,7 @@ class YomitanRendererTest {
 
         // Execute - should not throw exception, should handle gracefully
         try {
-            val result = renderer.renderTermEntry(termEntity, dictionaryCSS)
+            val result = renderer.renderTermEntry(termEntity, dictionaryCSS, listOf("test-dict"))
 
             // Verify - entry should still be rendered with at least the headword
             assertNotNull("Result should not be null", result)
@@ -480,7 +530,7 @@ class YomitanRendererTest {
 
         // Execute - should not throw exception, should fall back to no CSS
         try {
-            val result = renderer.renderTermEntry(termEntity, malformedCSS)
+            val result = renderer.renderTermEntry(termEntity, malformedCSS, listOf("test-dict"))
 
             // Verify - entry should still be rendered
             assertNotNull("Result should not be null", result)
@@ -568,8 +618,8 @@ class YomitanRendererTest {
 
         // Execute twice with same dictionary
         try {
-            renderer.renderTermEntry(termEntity1, dictionaryCSS)
-            renderer.renderTermEntry(termEntity2, dictionaryCSS)
+            renderer.renderTermEntry(termEntity1, dictionaryCSS, listOf("test-dict"))
+            renderer.renderTermEntry(termEntity2, dictionaryCSS, listOf("test-dict"))
 
             // Verify - both should succeed without re-parsing CSS
             // (CSS parsing happens only once due to cache)
@@ -578,7 +628,7 @@ class YomitanRendererTest {
             renderer.clearCssCache("test-dict")
 
             // Render again - should re-parse CSS
-            val result = renderer.renderTermEntry(termEntity1, dictionaryCSS)
+            val result = renderer.renderTermEntry(termEntity1, dictionaryCSS, listOf("test-dict"))
             assertNotNull("Result should not be null after cache clear", result)
         } catch (e: Exception) {
             // If rendering fails, at least verify cache methods exist
@@ -680,7 +730,7 @@ class YomitanRendererTest {
         `when`(mockDatabase.dictionaryDao()).thenReturn(mockDictionaryDao)
         `when`(mockDictionaryDao.getDictionaryByTitle(dictionaryTitle)).thenReturn(mockDictionaryEntity)
 
-        val result = renderer.renderTermEntry(termEntity, cssText)
+        val result = renderer.renderTermEntry(termEntity, cssText, listOf(dictionaryTitle))
 
         // Wrap in DictionaryResult
         val dictionaryResult = DictionaryResult(arrayOf(result))
@@ -970,7 +1020,7 @@ class YomitanRendererTest {
         `when`(mockDatabase.dictionaryDao()).thenReturn(mockDictionaryDao)
         `when`(mockDictionaryDao.getDictionaryByTitle(dictionaryTitle)).thenReturn(mockDictionaryEntity)
 
-        val result = renderer.renderTermEntry(termEntity, cssText)
+        val result = renderer.renderTermEntry(termEntity, cssText, listOf(dictionaryTitle))
 
         // Wrap in DictionaryResult
         val dictionaryResult = DictionaryResult(arrayOf(result))
@@ -1254,7 +1304,7 @@ class YomitanRendererTest {
         `when`(mockDatabase.dictionaryDao()).thenReturn(mockDictionaryDao)
         `when`(mockDictionaryDao.getDictionaryByTitle(dictionaryTitle)).thenReturn(mockDictionaryEntity)
 
-        val result = renderer.renderTermEntry(termEntity, cssText)
+        val result = renderer.renderTermEntry(termEntity, cssText, listOf(dictionaryTitle))
 
         // Wrap in DictionaryResult
         val dictionaryResult = DictionaryResult(arrayOf(result))
@@ -1434,7 +1484,7 @@ class YomitanRendererTest {
         `when`(mockDatabase.dictionaryDao()).thenReturn(mockDictionaryDao)
         `when`(mockDictionaryDao.getDictionaryByTitle(dictionaryTitle)).thenReturn(mockDictionaryEntity)
 
-        val result = renderer.renderTermEntry(termEntity, cssText)
+        val result = renderer.renderTermEntry(termEntity, cssText, listOf(dictionaryTitle))
 
         // Wrap in DictionaryResult
         val dictionaryResult = DictionaryResult(arrayOf(result))
@@ -1624,7 +1674,7 @@ class YomitanRendererTest {
         `when`(mockDictionaryDao.getDictionaryByTitle(dictionaryTitle)).thenReturn(mockDictionaryEntity)
 
         // Render the list of terms
-        val result = renderer.renderTermEntries(groupedTerms, "")
+        val result = renderer.renderTermEntries(groupedTerms, "", listOf(dictionaryTitle))
 
         // Assert headword
         assertEquals("日", result.headword)
@@ -1732,7 +1782,7 @@ class YomitanRendererTest {
         `when`(mockDictionaryDao.getDictionaryByTitle(dictionaryTitle)).thenReturn(mockDictionaryEntity)
 
         // Render the list of terms
-        val result = renderer.renderTermEntries(groupedTerms, "")
+        val result = renderer.renderTermEntries(groupedTerms, "", listOf(dictionaryTitle))
 
         // Assert headword
         assertEquals("高", result.headword)

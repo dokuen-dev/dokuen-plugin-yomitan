@@ -372,4 +372,32 @@ class KanjiEntryRendererTest {
         assertTrue(gradeIndex >= 0)
         assertTrue(freqIndex < gradeIndex)
     }
+
+    @Test
+    fun `render displays frequency badges when kanjiMetaList is provided`() {
+        val kanjiEntity = KanjiEntity(
+            dictionary = "Kanji Dict",
+            character = "木",
+            onyomi = "モク",
+            kunyomi = "き",
+            tags = "",
+            meanings = "[\"tree\"]",
+            stats = null
+        )
+        val kanjiMetaList = listOf(
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiMetaEntity(
+                dictionary = "JPDB Kanji Freq",
+                character = "木",
+                mode = "freq",
+                data = "150"
+            )
+        )
+
+        val renderer = KanjiEntryRenderer(SpanGenerator())
+        val result = renderer.render(kanjiEntity, emptyList(), kanjiMetaList)
+        val bodyText = result.body.text
+
+        assertTrue("Body text should contain frequency badge dict title", bodyText.contains("JPDB Kanji Freq"))
+        assertTrue("Body text should contain frequency value", bodyText.contains("150"))
+    }
 }

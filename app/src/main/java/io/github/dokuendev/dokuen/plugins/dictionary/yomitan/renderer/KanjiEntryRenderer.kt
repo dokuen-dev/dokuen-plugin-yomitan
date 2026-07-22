@@ -67,10 +67,11 @@ class KanjiEntryRenderer(
     fun render(
         kanjiEntity: KanjiEntity,
         tagMetaList: List<TagMetaEntity>,
+        kanjiMetaList: List<io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiMetaEntity> = emptyList(),
         dictionaryEntity: DictionaryEntity? = null
     ): DictionaryEntry {
-        // Render kanji tags and dictionary badge
-        renderTags(kanjiEntity, tagMetaList, dictionaryEntity)
+        // Render kanji tags, frequency badges, and dictionary badge
+        renderTags(kanjiEntity, tagMetaList, kanjiMetaList, dictionaryEntity)
 
         // Render meanings, readings, and statistics in a main table
         renderMainTable(kanjiEntity.meanings, kanjiEntity.onyomi, kanjiEntity.kunyomi, kanjiEntity.stats, tagMetaList)
@@ -93,21 +94,41 @@ class KanjiEntryRenderer(
     }
 
     /**
-     * Render the kanji tags with category-based styling.
+     * Render the kanji tags with category-based styling and frequency badges.
      *
      * Reference: yomitan/ext/js/display/display-generator.js lines 208, 258
      */
     private fun renderTags(
         kanjiEntity: KanjiEntity,
         tagMetaList: List<TagMetaEntity>,
+        kanjiMetaList: List<io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiMetaEntity>,
         dictionaryEntity: DictionaryEntity?
     ) {
         val tagNames = kanjiEntity.tags.split(' ').filter { it.isNotBlank() }.distinct()
         val tagMetaMap = tagMetaList.associateBy { it.name }
         val validTagNames = tagNames.filter { it in tagMetaMap }
 
-        if (validTagNames.isNotEmpty() || dictionaryEntity != null) {
+        val frequencyEntries = kanjiMetaList.filter { it.mode == "freq" }
+        val rawFrequencies = frequencyEntries.map { meta ->
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.RawFrequency(
+                dictionary = meta.dictionary,
+                jsonData = meta.data,
+                expression = kanjiEntity.character,
+                reading = null
+            )
+        }
+        val groupedBadges = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.FrequencyUtil.groupFrequencies(
+            rawFrequencies,
+            kanjiEntity.character
+        )
+
+        if (validTagNames.isNotEmpty() || groupedBadges.isNotEmpty() || dictionaryEntity != null) {
             TagRenderer.appendTagBadges(validTagNames, tagMetaMap, spanGenerator)
+
+            for (badge in groupedBadges) {
+                TagRenderer.appendFrequencyBadge(badge.dictionary, spanGenerator)
+                TagRenderer.appendFrequencyValueBadge(badge.values.joinToString(", "), spanGenerator)
+            }
 
             if (dictionaryEntity != null) {
                 val hoverText = TagRenderer.buildDictionaryHoverText(dictionaryEntity)
