@@ -730,7 +730,7 @@ class YomitanDictionaryPluginServiceTest {
 
             println("--- Styled Spans Info ---")
             println("Body Text: '$bodyText'")
-            styledSpans!!.forEachIndexed { idx, span ->
+            styledSpans.forEachIndexed { idx, span ->
                 val substring = if (span.startIndex in 0..bodyText.length && span.endIndex in 0..bodyText.length) {
                     bodyText.substring(span.startIndex, span.endIndex)
                 } else {
@@ -759,8 +759,21 @@ class YomitanDictionaryPluginServiceTest {
         }
     }
 
+    /**
+     * Two headwords sharing a reading, looked up via the internal-link `?query=` path so
+     * both are found by a single exact reading match - no substring scanning or
+     * deinflection involved, so which candidates are found is unambiguous.
+     *
+     * Their expressions are chosen so plain lexicographic order (the tie-break the
+     * comparator falls back to when frequencyOrder is 0) picks the *opposite* winner from
+     * the frequency data: "犬" < "猫" in Unicode code point order, but "猫" is given the
+     * better (lower/rank-based) frequency. If populateSortFrequencyOrder were a no-op -
+     * e.g. the "Frequency sorting dictionary" preference were ignored, as it effectively
+     * was in the bug this test used to (accidentally) pass around - "犬" would win by
+     * tie-break instead, and this test would fail instead of passing for the wrong reason.
+     */
     @Test
-    fun testOnLookupSortsByFrequencyHarmonicScore() = runBlocking {
+    fun testOnLookupSortsByChosenFrequencyDictionary() = runBlocking {
         val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
 
         val mainDict = "Main Word Dict"
@@ -779,52 +792,60 @@ class YomitanDictionaryPluginServiceTest {
             db.dictionaryDao().insertDictionary(
                 DictionaryEntity(
                     title = freqDict, revision = "1.0", sequenced = false, version = 3,
-                    importDate = 0L, prefixWildcardsSupported = true, styles = "", counts = null, importSuccess = true,
-                    frequencyMode = "rank-based"
+                    importDate = 0L, prefixWildcardsSupported = true, styles = "", counts = null, importSuccess = true
                 )
             )
 
-            // Insert terms with identical scores in mainDict
+            // Same reading, different expressions, identical score/dictionary - so without
+            // frequency sorting, only the expression tie-break decides the order.
             db.termDao().bulkAdd(
                 listOf(
                     TermEntity(
-                        dictionary = mainDict, expression = "猫", reading = "ねこ",
+                        dictionary = mainDict, expression = "猫", reading = "どうぶつ",
                         definitionTags = null, rules = "", score = 100.0, glossary = "[\"cat\"]",
                         sequence = 1L, termTags = null
                     ),
                     TermEntity(
-                        dictionary = mainDict, expression = "犬", reading = "いぬ",
+                        dictionary = mainDict, expression = "犬", reading = "どうぶつ",
                         definitionTags = null, rules = "", score = 100.0, glossary = "[\"dog\"]",
                         sequence = 2L, termTags = null
                     )
                 )
             )
 
-            // Insert frequency meta entries in freqDict: "犬" has higher frequency rank (10), "猫" has lower frequency rank (500)
+            // "猫" is the frequent one (rank 10); "犬" is rare (rank 500).
             db.termMetaDao().bulkAdd(
                 listOf(
-                    TermMetaEntity(dictionary = freqDict, expression = "犬", mode = "freq", data = "10"),
-                    TermMetaEntity(dictionary = freqDict, expression = "猫", mode = "freq", data = "500")
+                    TermMetaEntity(dictionary = freqDict, expression = "猫", mode = "freq", data = "10"),
+                    TermMetaEntity(dictionary = freqDict, expression = "犬", mode = "freq", data = "500")
                 )
             )
         }
 
-        // Save active dictionaries in preferences: both mainDict and freqDict enabled
         val prefs = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("active_dictionaries", "$mainDict,$freqDict").commit()
+        prefs.edit()
+            .putString("active_dictionaries", "$mainDict,$freqDict")
+            .putString("sort_frequency_dictionary", freqDict)
+            .putString("sort_frequency_dictionary_order", "ascending")
+            .commit()
 
         val config = Bundle().apply {
             putString(PluginHostConfigKeys.UI_THEME, "light")
         }
         service.onInitialize(config)
 
-        // Look up "犬猫"
-        val result = service.onLookup("犬猫", 0, 1)
-        assertNotNull(result)
-        assertTrue("Lookup results should not be empty", result.entries.isNotEmpty())
+        val queryUrl = "?query=" + java.net.URLEncoder.encode("どうぶつ", "UTF-8") + "&wildcards=off"
+        val result = service.onLookup(queryUrl, 0, queryUrl.length)
 
-        // "犬" (rank 10) should be sorted before "猫" (rank 500)
+        assertNotNull(result)
+        assertEquals("Both headwords sharing the reading should be found", 2, result.entries.size)
+
         val firstEntryHeadword = result.entries[0].headword
-        assertEquals("犬 should rank higher than 猫 due to frequency score", "犬", firstEntryHeadword)
+        assertEquals(
+            "猫 (rank 10) should sort before 犬 (rank 500) once JPDB Freq Dict is chosen as " +
+                    "the sort-frequency dictionary, even though 犬 < 猫 lexicographically",
+            "猫",
+            firstEntryHeadword
+        )
     }
 }
