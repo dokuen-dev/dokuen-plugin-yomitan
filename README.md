@@ -44,8 +44,12 @@ overlay, while this plugin supplies the dictionary lookups, deinflection, and de
   definitions, lists, bullet points, tags, and CSS styles in a clean mobile interface.
 * **Interactive Kanji Links:** Tapping a character in a headword opens the kanji entry with stroke
   order diagram and kanji stats.
+* **Frequency Dictionaries:** Import standalone Yomitan frequency archives (e.g. BCCWJ, JPDBv2,
+  Jiten) to show per-dictionary frequency badges inline with definitions. Optionally choose one
+  installed frequency dictionary to sort lookup results by, with automatic detection of whether it
+  is rank-based or occurrence-based.
 * **Modern Compose UI:** A clean dark-mode theme management screen that allows users to:
-    * Install high-quality presets (Jitendex, JMnedict, KANJIDIC).
+    * Install high-quality presets (Jitendex, JMnedict, KANJIDIC, BCCWJ, JPDBv2, Jiten).
     * Import local ZIPs from device storage.
     * Download dictionaries directly via custom URLs.
     * Reorder search priority of active dictionaries, or disable/delete them.
@@ -180,9 +184,6 @@ port:
 * **Pitch accent display:** Rendering of pitch accent graphs and downstep notation from dictionaries
   that include pitch data (e.g. [Kanjium](https://github.com/mifunetoshiro/kanjium)). The data is
   stored in the glossary JSON but not yet surfaced in the UI.
-* **Word frequency dictionaries:** Yomitan supports frequency dictionaries (e.g. JPDB, Innocent
-  Corpus) both for displaying corpus frequency inline with definitions and for influencing search
-  result sort order. Neither is currently implemented.
 
 ## Support
 
