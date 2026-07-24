@@ -331,6 +331,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
         val blockSpansArray = if (blockSpans.isEmpty()) null else blockSpans.toTypedArray()
 
+        val firstFlags = entriesToMerge.first().displayFlags
+        val mergedDisplayFlags = if (entriesToMerge.all { it.displayFlags == firstFlags }) firstFlags else 0
+
         return DictionaryEntry(
             headword = headword,
             pronunciation = pronunciation,
@@ -340,7 +343,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 styledSpans = styledSpans.toTypedArray(),
                 rubySpans = rubySpans.toTypedArray(),
                 blockSpans = blockSpansArray
-            )
+            ),
+            displayFlags = mergedDisplayFlags
         )
     }
 

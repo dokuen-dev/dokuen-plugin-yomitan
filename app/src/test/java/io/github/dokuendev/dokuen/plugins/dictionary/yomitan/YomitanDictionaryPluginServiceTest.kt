@@ -848,4 +848,57 @@ class YomitanDictionaryPluginServiceTest {
             firstEntryHeadword
         )
     }
+
+    @Test
+    fun testMergedKanjiEntryPreservesStrokeOrderDisplayFlag() {
+        runBlocking {
+            withContext(Dispatchers.IO) {
+                db.dictionaryDao().insertDictionary(
+                    DictionaryEntity(
+                        title = "Kanji Dict A", revision = "1.0", sequenced = false, version = 3,
+                        importDate = System.currentTimeMillis(), prefixWildcardsSupported = false,
+                        styles = "", counts = null, importSuccess = true
+                    )
+                )
+                db.dictionaryDao().insertDictionary(
+                    DictionaryEntity(
+                        title = "Kanji Dict B", revision = "1.0", sequenced = false, version = 3,
+                        importDate = System.currentTimeMillis(), prefixWildcardsSupported = false,
+                        styles = "", counts = null, importSuccess = true
+                    )
+                )
+                db.kanjiDao().bulkAdd(
+                    listOf(
+                        KanjiEntity(
+                            dictionary = "Kanji Dict A", character = "水", onyomi = "スイ", kunyomi = "みず",
+                            tags = "", meanings = "[\"water\"]", stats = null
+                        ),
+                        KanjiEntity(
+                            dictionary = "Kanji Dict B", character = "水", onyomi = "スイ", kunyomi = "みず",
+                            tags = "", meanings = "[\"water (alt)\"]", stats = null
+                        )
+                    )
+                )
+            }
+
+            val prefs = app.getSharedPreferences("yomitan_prefs", Application.MODE_PRIVATE)
+            prefs.edit()
+                .putString("installed_dictionaries", "$dictTitle,Kanji Dict A,Kanji Dict B")
+                .putString("active_dictionaries", "$dictTitle,Kanji Dict A,Kanji Dict B")
+                .commit()
+
+            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
+            service.onInitialize(config)
+
+            val queryUrl = "?kanji=%E6%B0%B4"
+            val result = service.onLookup(queryUrl, 0, queryUrl.length)
+
+            assertEquals(1, result.entries.size)
+            assertEquals(
+                io.github.dokuendev.dokuenreader.dictionary.FLAG_HEADWORD_STROKE_ORDER,
+                result.entries[0].displayFlags
+            )
+        }
+    }
 }
