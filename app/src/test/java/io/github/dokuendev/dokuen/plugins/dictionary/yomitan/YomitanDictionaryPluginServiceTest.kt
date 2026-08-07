@@ -9,12 +9,14 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.TermMetaEntity
+import io.github.dokuendev.dokuenreader.dictionary.DictionaryEntry
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryException
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -849,56 +851,88 @@ class YomitanDictionaryPluginServiceTest {
         )
     }
 
-    @Test
-    fun testMergedKanjiEntryPreservesStrokeOrderDisplayFlag() {
-        runBlocking {
-            withContext(Dispatchers.IO) {
+    /**
+     * Installs two kanji dictionaries that both have 水, and activates them with "Kanji Dict B"
+     * ahead of "Kanji Dict A", the reverse of their insertion order, so a test can tell
+     * priority order from database order.
+     */
+    private suspend fun setUpTwoKanjiDictionaries(): YomitanDictionaryPluginService {
+        withContext(Dispatchers.IO) {
+            for (title in listOf("Kanji Dict A", "Kanji Dict B")) {
                 db.dictionaryDao().insertDictionary(
                     DictionaryEntity(
-                        title = "Kanji Dict A", revision = "1.0", sequenced = false, version = 3,
+                        title = title, revision = "1.0", sequenced = false, version = 3,
                         importDate = System.currentTimeMillis(), prefixWildcardsSupported = false,
                         styles = "", counts = null, importSuccess = true
-                    )
-                )
-                db.dictionaryDao().insertDictionary(
-                    DictionaryEntity(
-                        title = "Kanji Dict B", revision = "1.0", sequenced = false, version = 3,
-                        importDate = System.currentTimeMillis(), prefixWildcardsSupported = false,
-                        styles = "", counts = null, importSuccess = true
-                    )
-                )
-                db.kanjiDao().bulkAdd(
-                    listOf(
-                        KanjiEntity(
-                            dictionary = "Kanji Dict A", character = "水", onyomi = "スイ", kunyomi = "みず",
-                            tags = "", meanings = "[\"water\"]", stats = null
-                        ),
-                        KanjiEntity(
-                            dictionary = "Kanji Dict B", character = "水", onyomi = "スイ", kunyomi = "みず",
-                            tags = "", meanings = "[\"water (alt)\"]", stats = null
-                        )
                     )
                 )
             }
+            db.kanjiDao().bulkAdd(
+                listOf(
+                    KanjiEntity(
+                        dictionary = "Kanji Dict A", character = "水", onyomi = "スイ", kunyomi = "みず",
+                        tags = "", meanings = "[\"meaning from A\"]", stats = null
+                    ),
+                    KanjiEntity(
+                        dictionary = "Kanji Dict B", character = "水", onyomi = "スイ", kunyomi = "みず",
+                        tags = "", meanings = "[\"meaning from B\"]", stats = null
+                    )
+                )
+            )
+        }
 
-            val prefs = app.getSharedPreferences("yomitan_prefs", Application.MODE_PRIVATE)
-            prefs.edit()
-                .putString("installed_dictionaries", "$dictTitle,Kanji Dict A,Kanji Dict B")
-                .putString("active_dictionaries", "$dictTitle,Kanji Dict A,Kanji Dict B")
-                .commit()
+        val prefs = app.getSharedPreferences("yomitan_prefs", Application.MODE_PRIVATE)
+        prefs.edit()
+            .putString("installed_dictionaries", "$dictTitle,Kanji Dict A,Kanji Dict B")
+            .putString("active_dictionaries", "$dictTitle,Kanji Dict B,Kanji Dict A")
+            .commit()
 
-            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
-            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
-            service.onInitialize(config)
+        val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+        service.onInitialize(Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") })
+        return service
+    }
+
+    /**
+     * Each kanji dictionary gets its own entry, in dictionary priority order, like the original's
+     * Translator.findKanji (one KanjiDictionaryEntry per database row, sorted by dictionary
+     * index). Each entry keeps its own headword and the stroke-order display flag.
+     */
+    private fun assertOneKanjiEntryPerDictionaryInPriorityOrder(entries: Array<DictionaryEntry>) {
+        assertEquals(2, entries.size)
+        assertTrue(entries[0].body.text.contains("meaning from B"))
+        assertFalse(entries[0].body.text.contains("meaning from A"))
+        assertTrue(entries[1].body.text.contains("meaning from A"))
+        assertFalse(entries[1].body.text.contains("meaning from B"))
+        for (entry in entries) {
+            assertEquals("水", entry.headword)
+            assertEquals(
+                io.github.dokuendev.dokuenreader.dictionary.FLAG_HEADWORD_STROKE_ORDER,
+                entry.displayFlags
+            )
+        }
+    }
+
+    @Test
+    fun testKanjiLinkGivesOneEntryPerDictionaryInPriorityOrder() {
+        runBlocking {
+            val service = setUpTwoKanjiDictionaries()
 
             val queryUrl = "?kanji=%E6%B0%B4"
             val result = service.onLookup(queryUrl, 0, queryUrl.length)
 
-            assertEquals(1, result.entries.size)
-            assertEquals(
-                io.github.dokuendev.dokuenreader.dictionary.FLAG_HEADWORD_STROKE_ORDER,
-                result.entries[0].displayFlags
-            )
+            assertOneKanjiEntryPerDictionaryInPriorityOrder(result.entries)
+        }
+    }
+
+    @Test
+    fun testTappedKanjiGivesOneEntryPerDictionaryInPriorityOrder() {
+        runBlocking {
+            val service = setUpTwoKanjiDictionaries()
+
+            // No term is exactly 水, so a one-character tap falls back to the kanji lookup.
+            val result = service.onLookup("水", 0, 1)
+
+            assertOneKanjiEntryPerDictionaryInPriorityOrder(result.entries)
         }
     }
 }

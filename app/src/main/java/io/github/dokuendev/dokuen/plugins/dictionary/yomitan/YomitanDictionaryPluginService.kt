@@ -178,19 +178,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 }
 
                 if (kanjiChar != null) {
-                    val kanjiMatches = db.kanjiDao().findByCharacterBulk(listOf(kanjiChar), activeDictionaryTitles)
-                    if (kanjiMatches.isNotEmpty()) {
-                        val sortedKanjiMatches = kanjiMatches.sortedBy { match ->
-                            val dictIndex = activeDictionaryTitles.indexOf(match.dictionary)
-                            if (dictIndex != -1) dictIndex else Int.MAX_VALUE
-                        }
-                        val kanjiEntries = sortedKanjiMatches.map { match ->
-                            val dictEntity = db.dictionaryDao().getDictionaryByTitle(match.dictionary)
-                            val styles = dictEntity?.styles ?: ""
-                            renderer.renderKanjiEntry(match, styles, activeDictionaryTitles)
-                        }
-                        entries = listOf(mergeDictionaryEntries(kanjiChar, null, null, kanjiEntries))
-                    }
+                    entries = renderKanjiEntries(kanjiChar, activeDictionaryTitles)
                 }
             }
 
@@ -382,22 +370,32 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             return listOf(buildNoKanjiDictionaryEntry(character))
         }
 
-        val kanjiMatches = db.kanjiDao().findByCharacterBulk(listOf(character), activeDictionaries)
-        if (kanjiMatches.isEmpty()) return emptyList()
+        return renderKanjiEntries(character, activeDictionaries)
+    }
 
-        // Sort by the user's dictionary priority order (same as the fallback in onLookup)
+    /**
+     * Renders one entry per kanji dictionary row for [character], in the user's dictionary
+     * priority order, or an empty list if no active dictionary has it.
+     *
+     * Mirrors the original's Translator.findKanji, which makes each database row its own
+     * KanjiDictionaryEntry and sorts them by dictionary index: entries from different kanji
+     * dictionaries are shown separately, never merged into one. sortedBy is stable, so rows
+     * from the same dictionary keep their database order, as in the original.
+     */
+    private suspend fun renderKanjiEntries(
+        character: String,
+        activeDictionaries: List<String>
+    ): List<DictionaryEntry> {
+        val kanjiMatches = db.kanjiDao().findByCharacterBulk(listOf(character), activeDictionaries)
         val sortedMatches = kanjiMatches.sortedBy { match ->
             val idx = activeDictionaries.indexOf(match.dictionary)
             if (idx != -1) idx else Int.MAX_VALUE
         }
-
-        val kanjiEntries = sortedMatches.map { match ->
+        return sortedMatches.map { match ->
             val dictEntity = db.dictionaryDao().getDictionaryByTitle(match.dictionary)
             val styles = dictEntity?.styles ?: ""
             renderer.renderKanjiEntry(match, styles, activeDictionaries)
         }
-
-        return listOf(mergeDictionaryEntries(character, null, null, kanjiEntries))
     }
 
     /**
