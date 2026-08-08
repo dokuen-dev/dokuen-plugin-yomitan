@@ -3,6 +3,7 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 import android.os.Bundle
 import android.util.Log
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.InflectionRule
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.JapaneseDeinflector
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.CssProcessor
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.YomitanRenderer
@@ -26,54 +27,6 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
     companion object {
         private const val TAG = "YomitanService"
-
-        private val deinflectionDescriptions = mapOf(
-            "-(ら)れる" to "Indicates a state of being (naturally) capable of doing an action.\nUsage: Attach (ら)れる to the irrealis form (未然形) of ichidan verbs.\nAttach る to the imperative form (命令形) of godan verbs.\nする becomes できる, くる becomes こ(ら)れる",
-            "-いる" to "1. Indicates an action continues or progresses to a point in time.\n2. Indicates an action is completed and remains as is.\n3. Indicates a state or condition that can be taken to be the result of undergoing some change.\nUsage: Attach いる to the て-form of verbs. い can be dropped in speech.\nAttach でいる after ない negative form of verbs.\n(Slang) Attach おる to the て-form of verbs. Contracts to とる・でる in speech.",
-            "-う・よう" to "1. Expresses speaker's will or intention.\n2. Expresses an invitation to the other party.\n3. (Used in …ようとする) Indicates being on the verge of initiating an action or transforming a state.\n4. Indicates an inference of a matter.\nUsage: Attach よう to the irrealis form (未然形) of ichidan verbs.\nAttach う to the irrealis form (未然形) of godan verbs after -o euphonic change form.\nAttach かろう to the stem of i-adjectives (4th meaning only).",
-            "-え" to "Slang. A sound change of i-adjectives.\nai：やばい → やべぇ\nui：さむい → さみぃ/さめぇ\noi：すごい → すげぇ",
-            "-おく" to "To do certain things in advance in preparation (or in anticipation) of latter needs.\nUsage: Attach おく to the て-form of verbs.\nAttach でおく after ない negative form of verbs.\nContracts to とく・どく in speech.",
-            "-がる" to "1. Shows subject’s feelings contrast with what is thought/known about them.\n2. Indicates subject's behavior (stands out).\nUsage: Attach がる to the stem of i-adjectives. It itself conjugates as a godan verb.",
-            "-き" to "Attributive form (連体形) of i-adjectives. An archaic form that remains in modern Japanese.",
-            "-く" to "Adverbial form of i-adjectives.\n",
-            "-げ" to "Describes a person's appearance. Shows feelings of the person.\nUsage: Attach げ or 気 to the stem of i-adjectives",
-            "-さ" to "Nominalizing suffix of i-adjectives indicating nature, state, mind or degree.\nUsage: Attach さ to the stem of i-adjectives.",
-            "-ざる" to "Negative form of verbs.\nUsage: Attach ざる to the irrealis form (未然形) of verbs.\nする becomes せざる",
-            "-しまう" to "1. Shows a sense of regret/surprise when you did have volition in doing something, but it turned out to be bad to do.\n2. Shows perfective/punctual achievement. This shows that an action has been completed.\n3. Shows unintentional action–“accidentally”.\nUsage: Attach しまう after the て-form of verbs.",
-            "-すぎる" to "Shows something \"is too...\" or someone is doing something \"too much\".\nUsage: Attach すぎる to the continuative form (連用形) of verbs, or to the stem of adjectives.",
-            "-す・さす" to "Contraction of the causative form.\nDescribes the intention to make someone do something.\nUsage: Attach す to the irrealis form (未然形) of godan verbs.\nAttach さす to the dictionary form (終止形) of ichidan verbs.\nする becomes さす, くる becomes こさす.\nIt itself conjugates as an godan verb.",
-            "-ず" to "1. Negative form of verbs.\n2. Continuative form (連用形) of the particle ぬ (nu).\nUsage: Attach ず to the irrealis form (未然形) of verbs.",
-            "-せる・させる" to "Describes the intention to make someone do something.\nUsage: Attach させる to the irrealis form (未然形) of ichidan verbs and くる.\nAttach せる to the irrealis form (未然形) of godan verbs and する.\nIt itself conjugates as an ichidan verb.",
-            "-そう" to "Appearing that; looking like.\nUsage: Attach そう to the continuative form (連用形) of verbs, or to the stem of adjectives.",
-            "-た" to "1. Indicates a reality that has happened in the past.\n2. Indicates the completion of an action.\n3. Indicates the confirmation of a matter.\n4. Indicates the speaker's confidence that the action will definitely be fulfilled.\n5. Indicates the events that occur before the main clause are represented as relative past.\n6. Indicates a mild imperative/command.\nUsage: Attach た to the continuative form (連用形) of verbs after euphonic change form, かった to the stem of i-adjectives.",
-            "-たい" to "1. Expresses the feeling of desire or hope.\n2. Used in ...たいと思います, an indirect way of saying what the speaker intends to do.\nUsage: Attach たい to the continuative form (連用形) of verbs. たい itself conjugates as i-adjective.",
-            "-たら" to "1. Denotes the latter stated event is a continuation of the previous stated event.\n2. Assumes that a matter has been completed or concluded.\nUsage: Attach たら to the continuative form (連用形) of verbs after euphonic change form, かったら to the stem of i-adjectives.",
-            "-たり" to "1. Shows two actions occurring back and forth (when used with two verbs).\n2. Shows examples of actions and states (when used with multiple verbs and adjectives).\nUsage: Attach たり to the continuative form (連用形) of verbs after euphonic change form, かったり to the stem of i-adjectives",
-            "-ちまう" to "Contraction of -しまう.\n1. Shows a sense of regret/surprise when you did have volition in doing something, but it turned out to be bad to do.\n2. Shows perfective/punctual achievement. This shows that an action has been completed.\n3. Shows unintentional action–“accidentally”.\nUsage: Attach しまう after the て-form of verbs, contract てしまう into ちまう.",
-            "-ちゃ" to "Contraction of ～ては.\n1. Explains how something always happens under the condition that it marks.\n2. Expresses the repetition (of a series of) actions.\n3. Indicates a hypothetical situation in which the speaker gives a (negative) evaluation about the other party's intentions.\n4. Used in \"Must Not\" patterns like ～てはいけない.\nUsage: Attach は after the て-form of verbs, contract ては into ちゃ.",
-            "-ちゃう" to "Contraction of -しまう.\n1. Shows a sense of regret/surprise when you did have volition in doing something, but it turned out to be bad to do.\n2. Shows perfective/punctual achievement. This shows that an action has been completed.\n3. Shows unintentional action–“accidentally”.\nUsage: Attach しまう after the て-form of verbs, contract てしまう into ちゃう.",
-            "-っか・よっか" to "Contraction of volitional form + か\n1. Expresses speaker's will or intention.\n2. Expresses an invitation to the other party.\nUsage: Replace final う with っ of volitional form then add ka.\nFor example: 行こうか -> 行こっか.",
-            "-て" to "て-form.\nIt has a myriad of meanings. Primarily, it is a conjunctive particle that connects two clauses together.\nUsage: Attach て to the continuative form (連用形) of verbs after euphonic change form, くて to the stem of i-adjectives.",
-            "-ない" to "1. Negative form of verbs.\n2. Expresses a feeling of solicitation to the other party.\nUsage: Attach ない to the irrealis form (未然形) of verbs, くない to the stem of i-adjectives. ない itself conjugates as i-adjective. ます becomes ません.",
-            "-なさい" to "Polite imperative suffix.\nUsage: Attach なさい after the continuative form (連用形) of verbs.",
-            "-ぬ" to "Negative form of verbs.\nUsage: Attach ぬ to the irrealis form (未然形) of verbs.\nする becomes せぬ",
-            "-ねば" to "1. Shows a hypothetical negation; if not ...\n2. Shows a must. Used with or without ならぬ.\nUsage: Attach ねば to the irrealis form (未然形) of verbs.\nする becomes せねば",
-            "-ば" to "1. Conditional form; shows that the previous stated condition's establishment is the condition for the latter stated condition to occur.\n2. Shows a trigger for a latter stated perception or judgment.\nUsage: Attach ば to the hypothetical form (仮定形) of verbs and i-adjectives.",
-            "-まい" to "Negative volitional form of verbs.\n1. Expresses speaker's assumption that something is likely not true.\n2. Expresses speaker's will or intention not to do something.\nUsage: Attach まい to the dictionary form (終止形) of verbs.\nAttach まい to the irrealis form (未然形) of ichidan verbs.\nする becomes しまい, くる becomes こまい",
-            "-ます" to "Polite conjugation of verbs and adjectives.\nUsage: Attach ます to the continuative form (連用形) of verbs.",
-            "-む" to "Archaic.\n1. Shows an inference of a certain matter.\n2. Shows speaker's intention.\nUsage: Attach む to the irrealis form (未然形) of verbs.\nする becomes せむ",
-            "-ゃ" to "Contraction of -ば.",
-            "-られる" to "1. Indicates an action received from an action performer.\n2. Expresses respect for the subject of action performer.\n3. Indicates a state of being (naturally) capable of doing an action.\nUsage: Attach られる to the irrealis form (未然形) of ichidan verbs.\nする becomes せられる, くる becomes こられる",
-            "-れる" to "1. Indicates an action received from an action performer.\n2. Expresses respect for the subject of action performer.\nUsage: Attach れる to the irrealis form (未然形) of godan verbs.",
-            "-ん" to "Negative form of verbs; a sound change of ぬ.\nUsage: Attach ん to the irrealis form (未然形) of verbs.\nする becomes せん",
-            "-んとする" to "1. Shows the speaker's will or intention.\n2. Shows an action or condition is on the verge of occurring.\nUsage: Attach んとする to the irrealis form (未然形) of verbs.\nする becomes せんとする",
-            "-んな" to "Slang sound change of r-column syllables to n (when before an n-sound, usually の or な)",
-            "-んばかり" to "Shows an action or condition is on the verge of occurring, or an excessive/extreme degree.\nUsage: Attach んばかり to the irrealis form (未然形) of verbs.\nする becomes せんばかり",
-            "-過ぎる" to "Shows something \"is too...\" or someone is doing something \"too much\".\nUsage: Attach 過ぎる to the continuative form (連用形) of verbs, or to the stem of adjectives.",
-            "命令形" to "1. To give orders.\n2. (As あれ) Represents the fact that it will never change no matter the circumstances.\n3. Express a feeling of hope.",
-            "連用形" to "Used to indicate actions that are (being) carried out.\nRefers to 連用形, the part of the verb after conjugating with -ます and dropping ます.",
-            "関西弁" to "Negative form of kansai-ben verbs"
-        )
     }
 
     override val configActivityName = ".MainActivity"
@@ -211,7 +164,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         val matchedLength: Int,
         val deinflectionRulesCount: Int,
         val dictionaryIndex: Int,
-        val deinflectionRules: List<String>
+        /** The conjugations undone to reach [term], innermost first. */
+        val deinflectionRules: List<InflectionRule>
     )
 
     private class TermGroup(
@@ -608,8 +562,13 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 "  Scanning len $len: substring='$substring' (Deinflections: ${deinflections.map { it.term }})"
             )
 
-            deinflections.forEach { deinflection ->
-                val candidate = deinflection.term
+            // The same text can be reached through several conjugations, each leaving it a different
+            // word class. As in the original (_groupDeinflectionsByTerm and
+            // _matchEntriesToDeinflections in translator.js), each text is looked up once, and an entry
+            // is only a match through a path whose word class its parts of speech allow, so, say, a
+            // noun is never reached through a verb ending. Paths come shortest first, so an entry
+            // shows the shortest chain that reaches it.
+            for ((candidate, paths) in deinflections.groupBy { it.term }) {
                 // Query both Expression and Reading matches and merge them to avoid omitting homophones
                 val expMatches = db.termDao().findByExpression(candidate, activeDictionaries)
                 Log.d(TAG, "    Candidate '$candidate': Expression query returned ${expMatches.size} matches")
@@ -621,6 +580,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
                 for (match in matches) {
                     if (processedTermIds.contains(match.id)) continue
+                    val entryConditions = deinflector.conditionFlagsFromPartsOfSpeech(match.rules)
+                    val path = paths.firstOrNull { JapaneseDeinflector.conditionsMatch(it.conditions, entryConditions) }
+                        ?: continue
                     processedTermIds.add(match.id)
 
                     val dictIndex = activeDictionaries.indexOf(match.dictionary)
@@ -630,9 +592,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                         TermLookupMatch(
                             term = match,
                             matchedLength = substring.length,
-                            deinflectionRulesCount = deinflection.rules.size,
+                            deinflectionRulesCount = path.rules.size,
                             dictionaryIndex = resolvedDictIndex,
-                            deinflectionRules = deinflection.rules
+                            deinflectionRules = path.rules
                         )
                     )
                 }
@@ -719,7 +681,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
     private fun decorateDeinflection(
         entry: DictionaryEntry,
-        rules: List<String>
+        rules: List<InflectionRule>
     ): DictionaryEntry {
         val badgeText = getString(R.string.deinflected_badge)
         val builder = StringBuilder(badgeText)
@@ -742,17 +704,18 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         val newSpans = mutableListOf<StyledSpan>()
         newSpans.add(badgeSpan)
 
+        // Like the original's inflection rule chain: innermost first, joined with "«", so
+        // 食べさせた reads "-せる・させる « -た".
         for (i in rules.indices) {
             val rule = rules[i]
-            val separator = if (i == 0) " " else " → "
+            val separator = if (i == 0) " " else " « "
             val prevEnd = builder.length
             builder.append(separator)
 
-            val start = builder.length
-            builder.append(rule)
+            builder.append(rule.name)
             val end = builder.length
 
-            val description = deinflectionDescriptions[rule]
+            val description = rule.description
 
             val spanStart = if (i == 0) prevEnd else prevEnd + 1
             val spanEnd = if (i == rules.size - 1) end else end + 1

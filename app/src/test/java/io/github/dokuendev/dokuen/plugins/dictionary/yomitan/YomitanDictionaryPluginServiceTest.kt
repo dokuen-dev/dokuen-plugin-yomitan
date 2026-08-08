@@ -342,19 +342,21 @@ class YomitanDictionaryPluginServiceTest {
                         definitionTags = "", rules = "", score = 10.0, sequence = 1, termTags = "",
                         glossary = "[\"to be made to eat (long match)\"]"
                     ),
+                    // 食べる is reached by deinflecting 食べさせられた, which only finds entries whose parts of
+                    // speech allow the result's word class: an ichidan verb ("v1").
                     TermEntity(
                         dictionary = dict1, expression = "食べる", reading = "たべる",
-                        definitionTags = "", rules = "", score = 100.0, sequence = 2, termTags = "",
+                        definitionTags = "", rules = "v1", score = 100.0, sequence = 2, termTags = "",
                         glossary = "[\"to eat (dict1 high score)\"]"
                     ),
                     TermEntity(
                         dictionary = dict1, expression = "食べる", reading = "たべる",
-                        definitionTags = "", rules = "", score = 20.0, sequence = 3, termTags = "",
+                        definitionTags = "", rules = "v1", score = 20.0, sequence = 3, termTags = "",
                         glossary = "[\"to eat (dict1 low score)\"]"
                     ),
                     TermEntity(
                         dictionary = dict2, expression = "食べる", reading = "たべる",
-                        definitionTags = "", rules = "", score = 50.0, sequence = 4, termTags = "",
+                        definitionTags = "", rules = "v1", score = 50.0, sequence = 4, termTags = "",
                         glossary = "[\"to eat (dict2 match)\"]"
                     )
                 )
@@ -601,7 +603,9 @@ class YomitanDictionaryPluginServiceTest {
                             expression = "言う",
                             reading = "いう",
                             definitionTags = "",
-                            rules = "v5u",
+                            // A godan verb, as dictionaries mark it ("v5"); only such word classes can be
+                            // reached through a conjugation.
+                            rules = "v5",
                             score = 100.0,
                             sequence = 11,
                             termTags = "",
@@ -631,10 +635,19 @@ class YomitanDictionaryPluginServiceTest {
             }
             println("-------------------------")
 
+            // Innermost rule first, joined with "«", as in the original's inflection rule chain.
+            val badgeText = service.getString(R.string.deinflected_badge)
+            assertTrue(bodyText, bodyText.startsWith("$badgeText -れる « -ます « -た\n"))
+
             val styledSpans = matched.body.styledSpans
             assertNotNull("styledSpans should not be null", styledSpans)
 
-            val taSpan = styledSpans!!.find { it.startIndex == 15 && it.endIndex == 19 }
+            // Each rule's span also covers the separator around it; find it by the rule it holds.
+            fun ruleSpan(rule: String) = styledSpans!!.find {
+                it.style.hoverText != null && bodyText.substring(it.startIndex, it.endIndex).trim(' ', '«') == rule
+            }
+
+            val taSpan = ruleSpan("-た")
             assertNotNull("Should find a styled span for '-た'", taSpan)
             assertEquals(
                 "1. Indicates a reality that has happened in the past.\n" +
@@ -647,7 +660,7 @@ class YomitanDictionaryPluginServiceTest {
                 taSpan!!.style.hoverText
             )
 
-            val masuSpan = styledSpans.find { it.startIndex == 19 && it.endIndex == 25 }
+            val masuSpan = ruleSpan("-ます")
             assertNotNull("Should find a styled span for '-ます'", masuSpan)
             assertEquals(
                 "Polite conjugation of verbs and adjectives.\n" +
@@ -655,7 +668,7 @@ class YomitanDictionaryPluginServiceTest {
                 masuSpan!!.style.hoverText
             )
 
-            val reruSpan = styledSpans.find { it.startIndex == 25 && it.endIndex == 30 }
+            val reruSpan = ruleSpan("-れる")
             assertNotNull("Should find a styled span for '-れる'", reruSpan)
             assertEquals(
                 "1. Indicates an action received from an action performer.\n" +

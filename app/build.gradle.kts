@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.dokuendev.dokuen.plugins.dictionary.yomitan"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
