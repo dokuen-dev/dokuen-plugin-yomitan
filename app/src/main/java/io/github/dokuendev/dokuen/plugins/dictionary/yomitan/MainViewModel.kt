@@ -7,6 +7,14 @@ import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateBehavior
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateScope
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldDefaults
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.importer.AndroidMediaLoader
@@ -58,7 +66,12 @@ data class MainUiState(
     val frequencyDictionaryOptions: List<String> = emptyList(),
     /** Empty string means "None" (no frequency-based sorting), matching yomitan's own default. */
     val sortFrequencyDictionary: String = "",
-    val sortFrequencyDictionaryOrder: String = "descending"
+    val sortFrequencyDictionaryOrder: String = "descending",
+    val ankiSettings: AnkiSettings = AnkiSettings(),
+    val ankiDroidInstalled: Boolean = false,
+    val ankiDroidPermissionGranted: Boolean = false,
+    val ankiDeckOptions: Map<Long, String> = emptyMap(),
+    val ankiModelOptions: Map<Long, String> = emptyMap()
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -77,13 +90,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "https://github.com/Kuuuube/yomitan-dictionaries/releases/download/yomitan-permalink/JPDB_v2.2_Frequency_Kana.zip"
         const val PRESETS_JITEN =
             "https://api.jiten.moe/api/frequency-list/download?downloadType=yomitan"
+        const val MAX_ANKI_CARD_FORMATS = 5
     }
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
+    private var ankiDroidClientInstance: AnkiDroidClient? = null
+
+    /** Lazily created; tests may replace it with a fake before triggering Anki calls. */
+    internal var ankiDroidClient: AnkiDroidClient
+        get() = ankiDroidClientInstance ?: AnkiDroidClient(getApplication()).also { ankiDroidClientInstance = it }
+        set(value) {
+            ankiDroidClientInstance = value
+        }
+
     init {
         loadInstalledDictionaries()
+        loadAnkiSettings()
+        refreshAnkiStatus()
     }
 
     fun loadInstalledDictionaries() {
@@ -589,5 +614,150 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val prefs = getApplication<Application>().getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
         prefs.edit { putString("installed_dictionaries", joined) }
         Log.d(TAG, "Cached installed dictionaries: $joined")
+    }
+
+    fun refreshAnkiStatus() {
+        viewModelScope.launch {
+            val installed = ankiCallOrDefault("isAnkiDroidInstalled", false) { ankiDroidClient.isAnkiDroidInstalled() }
+            val granted = ankiCallOrDefault("hasPermission", false) { ankiDroidClient.hasPermission() }
+            _uiState.update { it.copy(ankiDroidInstalled = installed, ankiDroidPermissionGranted = granted) }
+            if (installed && granted) refreshAnkiDeckAndModelOptions()
+        }
+    }
+
+    fun refreshAnkiDeckAndModelOptions() {
+        viewModelScope.launch {
+            val decks = ankiCallOrDefault("getDeckList", emptyMap()) { ankiDroidClient.getDeckList() }
+            val models = ankiCallOrDefault("getModelList", emptyMap()) { ankiDroidClient.getModelList() }
+            _uiState.update { it.copy(ankiDeckOptions = decks, ankiModelOptions = models) }
+        }
+    }
+
+    /**
+     * Fetches the field names of [modelId] from AnkiDroid and merges them into the card
+     * format at [index] via [applyFetchedAnkiFields]. [onDone] runs once the fetch finishes,
+     * whether or not anything was applied.
+     */
+    fun syncAnkiCardFormatFields(index: Int, modelId: Long, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            val fields = ankiCallOrDefault("getFieldList", emptyList()) { ankiDroidClient.getFieldList(modelId) }
+            if (fields.isNotEmpty()) applyFetchedAnkiFields(index, modelId, fields)
+            onDone()
+        }
+    }
+
+    /**
+     * Rebuilds the fields of the card format at [index] for [fieldNames], reading the
+     * format's current state at the time the fetch completes (not a snapshot from when it
+     * started), so edits made in the meantime are kept. Does nothing if that format no
+     * longer uses [modelId] (its model was changed again, or the format was deleted and
+     * another one shifted into its slot). Existing same-named fields are kept as-is; new
+     * ones get the original Yomitan's default values.
+     */
+    internal fun applyFetchedAnkiFields(index: Int, modelId: Long, fieldNames: List<String>) {
+        val current = _uiState.value.ankiSettings.cardFormats.getOrNull(index) ?: return
+        if (current.modelId != modelId) return
+        val merged = AnkiFieldDefaults.buildFields(fieldNames, current.type, current.fields)
+        if (merged == current.fields && merged.keys.toList() == current.fields.keys.toList()) return
+        updateAnkiCardFormat(index) { it.copy(fields = merged) }
+    }
+
+    private suspend fun <T> ankiCallOrDefault(name: String, default: T, block: () -> T): T {
+        return withContext(Dispatchers.IO) {
+            try {
+                block()
+            } catch (e: Exception) {
+                // AnkiDroid's ContentProvider can throw (permission revoked, collection not
+                // available, provider crash); show the degraded state instead of crashing.
+                Log.w(TAG, "AnkiDroid call $name failed", e)
+                default
+            }
+        }
+    }
+
+    fun setAnkiEnabled(enabled: Boolean) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(enabled = enabled))
+    }
+
+    fun setAnkiTags(tags: List<String>) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(tags = tags))
+    }
+
+    fun setAnkiCheckForDuplicates(check: Boolean) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(checkForDuplicates = check))
+    }
+
+    fun setAnkiDuplicateScope(scope: AnkiDuplicateScope) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(duplicateScope = scope))
+    }
+
+    fun setAnkiDuplicateScopeCheckAllModels(checkAllModels: Boolean) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(duplicateScopeCheckAllModels = checkAllModels))
+    }
+
+    fun setAnkiDuplicateBehavior(behavior: AnkiDuplicateBehavior) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(duplicateBehavior = behavior))
+    }
+
+    fun addAnkiCardFormat(format: AnkiCardFormat) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(cardFormats = _uiState.value.ankiSettings.cardFormats + format))
+    }
+
+    /**
+     * Applies [transform] to the card format at [index] as currently stored, so an edit never
+     * writes back a copy captured before a concurrent change (such as a field list fetched from
+     * AnkiDroid). Does nothing if [index] is out of range.
+     */
+    fun updateAnkiCardFormat(index: Int, transform: (AnkiCardFormat) -> AnkiCardFormat) {
+        val updatedList = _uiState.value.ankiSettings.cardFormats.toMutableList()
+        if (index in updatedList.indices) {
+            updatedList[index] = transform(updatedList[index])
+            persistAnkiSettings(_uiState.value.ankiSettings.copy(cardFormats = updatedList))
+        }
+    }
+
+    fun removeAnkiCardFormat(index: Int) {
+        val updatedList = _uiState.value.ankiSettings.cardFormats.toMutableList()
+        if (index in updatedList.indices) {
+            updatedList.removeAt(index)
+            persistAnkiSettings(_uiState.value.ankiSettings.copy(cardFormats = updatedList))
+        }
+    }
+
+    /**
+     * Creates a new card format with placeholder deck/model (id 0, matching the tab-strip
+     * editor's "add first, fill in afterward" flow; see appendTermAnkiLinksIfConfigured's
+     * completeness filter in YomitanDictionaryPluginService.kt, which keeps an unconfigured
+     * format from rendering a broken Add link). Returns false without adding if the format
+     * count is already at the original's 5-format cap.
+     */
+    fun addDefaultAnkiCardFormat(): Boolean {
+        val current = _uiState.value.ankiSettings.cardFormats
+        if (current.size >= MAX_ANKI_CARD_FORMATS) return false
+        addAnkiCardFormat(
+            AnkiCardFormat(
+                name = getApplication<Application>().getString(
+                    R.string.anki_card_format_default_name,
+                    current.size + 1
+                ),
+                type = AnkiEntryType.TERM,
+                deckId = 0L,
+                deckName = "",
+                modelId = 0L,
+                modelName = "",
+                fields = emptyMap()
+            )
+        )
+        return true
+    }
+
+    private fun persistAnkiSettings(settings: AnkiSettings) {
+        AnkiSettingsStore.save(getApplication(), settings)
+        _uiState.update { it.copy(ankiSettings = settings) }
+    }
+
+    private fun loadAnkiSettings() {
+        val loaded = AnkiSettingsStore.load(getApplication())
+        _uiState.update { it.copy(ankiSettings = loaded) }
     }
 }

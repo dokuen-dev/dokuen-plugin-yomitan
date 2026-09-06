@@ -1,6 +1,7 @@
 [versions]
 activityCompose = "1.13.0"
 agp = "9.2.1"
+ankidroidApi = "api-v1.1.0"
 core = "1.7.0"
 coreKtx = "1.19.0"
 coreVersion = "1.7.0"
@@ -22,6 +23,7 @@ roomVersion = "2.8.4"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+ankidroid-api = { module = "com.github.ankidroid:Anki-Android", version.ref = "ankidroidApi" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-v150 = { module = "androidx.test:core", version.ref = "coreVersion" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycleViewmodelCompose" }

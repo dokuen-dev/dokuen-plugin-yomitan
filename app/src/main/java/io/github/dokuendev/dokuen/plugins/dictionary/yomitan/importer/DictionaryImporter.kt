@@ -7,6 +7,7 @@
 
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.importer
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.room.withTransaction
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.R
@@ -115,6 +116,7 @@ class DictionaryImporter(
     /**
      * JS: importDictionary(dictionaryDatabase, archiveContent, details)
      */
+    @SuppressLint("DirectSystemCurrentTimeMillisUsage")
     suspend fun importDictionary(
         inputStream: InputStream,
         details: ImportDetails = ImportDetails(),

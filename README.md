@@ -48,6 +48,10 @@ overlay, while this plugin supplies the dictionary lookups, deinflection, and de
   Jiten) to show per-dictionary frequency badges inline with definitions. Optionally choose one
   installed frequency dictionary to sort lookup results by, with automatic detection of whether it
   is rank-based or occurrence-based.
+* **Custom Anki Export:** Export term and kanji lookups directly to AnkiDroid using configurable
+  card formats. Pick any deck and note type, map fields with the same `{expression}`, `{reading}`,
+  `{glossary}`, `{tags}`, `{frequencies}`, `{sentence}`/`{cloze-*}`, and other markers used by the
+  original Yomitan extension, with duplicate detection and per-field overwrite behavior.
 * **Modern Compose UI:** A clean dark-mode theme management screen that allows users to:
     * Install high-quality presets (Jitendex, JMnedict, KANJIDIC, BCCWJ, JPDBv2, Jiten).
     * Import local ZIPs from device storage.
@@ -111,6 +115,18 @@ Data is stored using Android Jetpack Room with the following table entities:
 * **`KanjiEntity`:** Stores kanji characters, onyomi, kunyomi, meanings, and statistics.
 * **`MediaEntity`:** Caches images embedded inside the dictionaries as byte arrays.
 * **`TagMetaEntity`:** Stores tag category details (e.g. grammar, dialect) and styling hints.
+
+### Anki Export
+
+The plugin owns its own end-to-end Anki export pipeline rather than delegating to the host app's
+built-in (fixed-format) Anki button. A pure-Kotlin marker/template engine resolves `{marker}`
+tokens against structured note data, an `AnkiDroidClient` talks to AnkiDroid directly via its
+`AddContentApi`/`FlashCardsContract`, and `YomitanDictionaryPluginService` appends one `action:`
+link per configured card format to each rendered lookup entry. See
+[`docs/anki-export.md`](docs/anki-export.md) for the full architecture, the current marker support
+table, and the feature's known gaps versus the original extension, and
+[`docs/anki-export-manual-test-plan.md`](docs/anki-export-manual-test-plan.md) for the manual test
+procedure.
 
 ## Getting Started
 
@@ -176,9 +192,6 @@ or browse the issue tracker for smaller tasks.
 Features present in the original Yomitan browser extension that are not yet implemented in this
 port:
 
-* **Custom Anki templates:** Yomitan supports configurable Handlebars templates mapping markers (
-  `{expression}`, `{reading}`, `{sentence}`, `{audio}`, `{pitch-accents}`, `{cloze-*}`, frequency
-  data, etc.) to note fields. Currently only a fixed card format is supported.
 * **Pronunciation audio:** Playback of word audio from dedicated sources such as JapanesePod101 or
   Forvo. Currently only Android's built-in TTS is used.
 * **Pitch accent display:** Rendering of pitch accent graphs and downstep notation from dictionaries

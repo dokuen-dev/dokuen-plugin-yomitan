@@ -5,6 +5,7 @@
 
     <queries>
         <package android:name="io.github.dokuendev.dokuenreader" />
+        <package android:name="com.ichi2.anki" />
     </queries>
 
     <application
@@ -38,7 +39,7 @@
                 android:value="Yomitan" />
             <meta-data
                 android:name="plugin_version"
-                android:value="1.0.0" />
+                android:value="1.2.0" />
             <meta-data
                 android:name="plugin_author"
                 android:value="Dokuen Reader" />

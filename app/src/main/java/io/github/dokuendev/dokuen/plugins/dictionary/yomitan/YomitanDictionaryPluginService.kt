@@ -2,12 +2,28 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 
 import android.os.Bundle
 import android.util.Log
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardIcon
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateBehavior
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldMerger
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteData
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteDataBuilder
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteInfo
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSentenceExtractor
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiTemplateEngine
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.InflectionRule
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.JapaneseDeinflector
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.CssProcessor
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.YomitanRenderer
 import io.github.dokuendev.dokuenreader.dictionary.BlockSpan
+import io.github.dokuendev.dokuenreader.dictionary.CustomActionResult
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryEntry
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryErrorCode
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryException
@@ -22,11 +38,106 @@ import io.github.dokuendev.dokuenreader.plugin.core.InitResult
 import io.github.dokuendev.dokuenreader.plugin.core.InitResultFactory
 import io.github.dokuendev.dokuenreader.plugin.core.PluginCapabilityKeys
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
+import java.util.concurrent.atomic.AtomicLong
+
+// A format created by the tab-strip editor's "+" starts with deckId/modelId 0 (no deck/model
+// chosen yet). This must be used consistently everywhere card formats are filtered down to a
+// list whose positional indices get encoded into "format=$index" action links - otherwise the
+// index encoded at render time (against one filtered list) can be resolved against a
+// differently-filtered list at execute time, silently routing a tap to the wrong format.
+private fun AnkiCardFormat.isComplete(): Boolean = deckId != 0L && modelId != 0L
+
+/**
+ * Identifies one entry's action links: [token] names the lookup, [entry] the linked entry
+ * within it. Encoded in each link as `action:anki_add?token=<token>&entry=<entry>&format=<i>`.
+ */
+private data class AnkiLinkRef(val token: String, val entry: Int)
+
+private fun ankiAddLinkParams(link: String?): Map<String, String>? {
+    val payload = link?.removePrefix("action:") ?: return null
+    if (!payload.startsWith("anki_add?")) return null
+    return payload.removePrefix("anki_add?").split("&").mapNotNull { pair ->
+        val idx = pair.indexOf('=')
+        if (idx < 0) null else pair.substring(0, idx) to pair.substring(idx + 1)
+    }.toMap()
+}
+
+private fun parseAnkiAddLink(link: String?): AnkiLinkRef? {
+    val params = ankiAddLinkParams(link) ?: return null
+    val token = params["token"]?.ifEmpty { null } ?: return null
+    val entry = params["entry"]?.toIntOrNull() ?: return null
+    return AnkiLinkRef(token, entry)
+}
+
+/** The `format=` index of an action link, or null if it is not a well-formed one. */
+private fun parseAnkiAddLinkFormat(link: String?): Int? = ankiAddLinkParams(link)?.get("format")?.toIntOrNull()
+
+/** The note a tap on a format's link last wrote: a new one, or an existing duplicate it overwrote. */
+private enum class AnkiNoteWrite { ADDED, OVERWRITTEN }
+
+/**
+ * What a tap on a format's link would do, given the duplicates found for it, shown by the link's
+ * color. The colors are what the original's action icons render as (ext/css/display.css and the
+ * icon SVGs in ext/images): every icon is filled with green #6FB558, which the add-duplicate and
+ * overwrite variants pass through an SVG color filter (computed in sRGB, as the SVGs specify),
+ * and a disabled button is shown in grayscale.
+ */
+private enum class AnkiLinkStatus(val color: Int) {
+    /** No duplicate, or not checked yet: add a note. The plain icons (big-circle.svg etc.). */
+    CAN_ADD(0xFF6FB558.toInt()),
+
+    /**
+     * A duplicate exists and "Allow adding" adds another note (or "Allow overwriting" finds none
+     * of the format's own note type to overwrite). #6FB558 through add-duplicate-*.svg's
+     * "green-to-purple" filter (hue rotated by 180 degrees).
+     */
+    ADD_DUPLICATE(0xFFD08AE7.toInt()),
+
+    /**
+     * A duplicate of the format's own note type exists and "Allow overwriting" overwrites it.
+     * #6FB558 through overwrite-*.svg's "green-to-orange" filter (hue rotated by 280 degrees,
+     * then saturated by 2).
+     */
+    OVERWRITE(0xFFFF8727.toInt()),
+
+    /**
+     * A duplicate exists and "Prevent adding" blocks the add, for which the original disables its
+     * button: #6FB558 through `button.action-button:disabled`'s grayscale(100%). That rule also
+     * sets 25% opacity, which is left out here: it fits a small icon with a tooltip, but would
+     * make a text label hard to read.
+     */
+    PREVENTED(0xFF9F9F9F.toInt());
+
+    companion object {
+        /**
+         * The status of a format whose duplicate search found notes ([hasDuplicate]), some of
+         * them of the format's own note type ([hasSameTypeDuplicate]), decided the way the tap
+         * path decides what to do with them.
+         */
+        fun of(behavior: AnkiDuplicateBehavior, hasDuplicate: Boolean, hasSameTypeDuplicate: Boolean): AnkiLinkStatus =
+            when {
+                !hasDuplicate -> CAN_ADD
+                behavior == AnkiDuplicateBehavior.PREVENT -> PREVENTED
+                behavior == AnkiDuplicateBehavior.OVERWRITE && hasSameTypeDuplicate -> OVERWRITE
+                else -> ADD_DUPLICATE
+            }
+    }
+}
 
 class YomitanDictionaryPluginService : DictionaryPluginService() {
 
     companion object {
         private const val TAG = "YomitanService"
+
+        /** How many lookups keep their action links tappable. */
+        private const val ANKI_CACHE_CAPACITY = 10
+
+        /** Prefix of the kanji links TermEntryRenderer puts on a term's headword kanji. */
+        private const val KANJI_LINK_PREFIX = "lookup:?kanji="
+
+        // The size of the Anki links relative to the dictionary text (InlineStyle.fontSize is a
+        // scale factor): they are secondary to the entry, so they are drawn a little smaller.
+        private const val ANKI_LINK_FONT_SIZE = 0.75f
     }
 
     override val configActivityName = ".MainActivity"
@@ -44,6 +155,137 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     private lateinit var db: AppDatabase
     private lateinit var renderer: YomitanRenderer
     private val deinflector = JapaneseDeinflector()
+    private var ankiDroidClientInstance: AnkiDroidClient? = null
+
+    /** Created on first use; tests replace it with a fake before triggering Anki calls. */
+    internal var ankiDroidClient: AnkiDroidClient
+        get() = ankiDroidClientInstance
+            ?: AnkiDroidClient(applicationContext).also { ankiDroidClientInstance = it }
+        set(value) {
+            ankiDroidClientInstance = value
+        }
+
+    /**
+     * Reloaded from the settings store at the start of every lookup: the plugin session is
+     * initialized once, so edits made in the settings screen mid-session would otherwise
+     * never be seen.
+     */
+    @Volatile
+    private var ankiSettings: AnkiSettings = AnkiSettings()
+
+    /**
+     * Everything an action link needs when the user taps it, captured when the link was
+     * rendered: the exact ordered list of card formats the link's `format=` index refers to,
+     * the settings in force at that time, and a recipe for the note data. Snapshotting these
+     * keeps a tap resolving to the format the user saw even if the settings changed, or newer
+     * lookups ran, in between.
+     *
+     * The note data (tag and frequency queries, glossary conversion, cloze) is not computed
+     * when the link is rendered, because most rendered links are never tapped and lookups are
+     * the hot path. [buildNoteData] holds only the cheap inputs captured at lookup time and is
+     * run on the first [noteData] call; the result is then reused.
+     */
+    private class AnkiLinkContext(
+        val formats: List<AnkiCardFormat>,
+        val settings: AnkiSettings,
+        private val buildNoteData: suspend () -> AnkiNoteData
+    ) {
+        @Volatile
+        private var cachedNoteData: AnkiNoteData? = null
+
+        /**
+         * What the last successful tap on each format's link (keyed by its index in [formats])
+         * wrote, which its label shows. Guarded by the lock of the [AnkiLookup] holding this.
+         */
+        val writes = HashMap<Int, AnkiNoteWrite>()
+
+        /**
+         * The status of each format's link (keyed like [writes]) as last found on a tap, which
+         * its color shows. A format missing here has not been checked and shows [AnkiLinkStatus.CAN_ADD].
+         * Guarded like [writes].
+         */
+        val statuses = HashMap<Int, AnkiLinkStatus>()
+
+        suspend fun noteData(): AnkiNoteData =
+            cachedNoteData ?: buildNoteData().also { cachedNoteData = it }
+    }
+
+    /**
+     * The scanned match a sentence is taken from: UTF-16 indices [matchStart, matchEnd) of
+     * [contextText]. The sentence itself is extracted only when a note needs it.
+     */
+    private class AnkiSentenceSource(val contextText: String, val matchStart: Int, val matchEnd: Int) {
+        val matchedText: String get() = contextText.substring(matchStart, matchEnd)
+
+        fun extract(): AnkiSentenceExtractor.Sentence =
+            AnkiSentenceExtractor.extract(contextText, matchStart, matchEnd)
+
+        companion object {
+            fun of(contextText: String, matchStart: Int, matchEnd: Int): AnkiSentenceSource? =
+                if (matchStart in 0..matchEnd && matchEnd <= contextText.length) {
+                    AnkiSentenceSource(contextText, matchStart, matchEnd)
+                } else {
+                    null
+                }
+        }
+    }
+
+    /**
+     * What a kanji lookup reached through a term's headword link carries over from the term's
+     * lookup, as the original's kanji links do (display.js, _onKanjiLookup and
+     * _createSearchParams): the match the term's sentence comes from, if it was scanned, and
+     * the lookup's query.
+     */
+    private class AnkiKanjiLinkOrigin(val sentenceSource: AnkiSentenceSource?, val searchQuery: String)
+
+    /**
+     * Collects the link contexts of one lookup while its entries are built. Each lookup gets
+     * its own [token], and each linked entry an index into [contexts]; the whole set is
+     * registered once the lookup has produced its result. [kanjiLinkOrigins] holds what the
+     * lookup's kanji headword links refer to (see withKanjiLinkOrigins).
+     */
+    private class AnkiLookupLinks(val token: String) {
+        val contexts = mutableListOf<AnkiLinkContext>()
+        val kanjiLinkOrigins = mutableListOf<AnkiKanjiLinkOrigin>()
+    }
+
+    /**
+     * One lookup's action links: its rendered [entries] (rewritten when a tap relabels a link,
+     * since the host replaces its whole result with an UpdateResult), one [AnkiLinkContext] per
+     * linked entry, and what its kanji headword links refer to. Lock the lookup to
+     * read or change [entries] or its contexts' writes and statuses.
+     */
+    private class AnkiLookup(
+        var entries: List<DictionaryEntry>,
+        val contexts: List<AnkiLinkContext>,
+        val kanjiLinkOrigins: List<AnkiKanjiLinkOrigin>
+    )
+
+    /**
+     * The newest lookups only, evicted a whole lookup at a time so every link of a retained
+     * lookup stays valid however many entries it has. The host keeps a back/forward history of
+     * earlier results without re-querying the plugin, so links from older lookups must stay
+     * tappable, but the cache must not grow without bound. Lookups can also run concurrently,
+     * hence the synchronized map and atomic counter.
+     */
+    @Volatile
+    internal var ankiCacheCapacity: Int = ANKI_CACHE_CAPACITY
+    private val ankiLookups: MutableMap<String, AnkiLookup> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, AnkiLookup>() {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, AnkiLookup>?): Boolean =
+                size > ankiCacheCapacity
+        }
+    )
+    private val ankiTokenCounter = AtomicLong()
+
+    /**
+     * Starts every lookup token this instance issues. A link can outlive the instance that
+     * rendered it (for example if the plugin process is restarted while the host still shows
+     * an earlier result), and a new instance restarts [ankiTokenCounter]. Without a prefix
+     * unique to the instance, such a link could name a newer lookup of the new instance and
+     * export the wrong entry instead of failing as a stale link.
+     */
+    private val ankiTokenPrefix: String = java.util.UUID.randomUUID().toString().substringBefore('-')
 
     override val capabilities = Bundle().apply {
         putBoolean(PluginCapabilityKeys.HANDLES_SEGMENTATION, true)
@@ -71,6 +313,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             sortFrequencyDictionary = prefs.getString("sort_frequency_dictionary", "") ?: ""
             sortFrequencyDictionaryOrder =
                 prefs.getString("sort_frequency_dictionary_order", "descending") ?: "descending"
+            ankiSettings = AnkiSettingsStore.load(applicationContext)
 
             Log.d(
                 TAG,
@@ -97,6 +340,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 )
             }
 
+            ankiSettings = AnkiSettingsStore.load(applicationContext)
+
             val start = maxOf(0, minOf(cursorStartIndex, contextText.length))
             val maxLen = minOf(contextText.length - start, 12)
             if (maxLen <= 0 && !contextText.startsWith("?")) {
@@ -114,11 +359,12 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                         "totalTermsInDb=$termCount, totalKanjiInDb=$kanjiCount"
             )
 
+            val ankiLinks = AnkiLookupLinks("$ankiTokenPrefix-${ankiTokenCounter.getAndIncrement()}")
             var entries = if (contextText.startsWith("?")) {
-                lookupInternalLink(contextText, activeDictionaryTitles)
+                lookupInternalLink(contextText, activeDictionaryTitles, ankiLinks)
             } else {
                 val minLen = maxOf(1, cursorEndIndex - start)
-                scanAndDeinflectLookup(contextText, start, maxLen, minLen, activeDictionaryTitles)
+                scanAndDeinflectLookup(contextText, start, maxLen, minLen, activeDictionaryTitles, ankiLinks)
             }
 
             if (entries.isEmpty()) {
@@ -131,7 +377,17 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 }
 
                 if (kanjiChar != null) {
-                    entries = renderKanjiEntries(kanjiChar, activeDictionaryTitles)
+                    entries = renderKanjiEntries(
+                        kanjiChar,
+                        activeDictionaryTitles,
+                        ankiLinks,
+                        sentenceSource = if (!contextText.startsWith("?")) {
+                            AnkiSentenceSource.of(contextText, start, start + kanjiChar.length)
+                        } else {
+                            null
+                        },
+                        searchQuery = kanjiChar
+                    )
                 }
             }
 
@@ -149,6 +405,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 )
             }
 
+            registerAnkiLookup(ankiLinks, entries)
             return DictionaryResult(entries = entries.toTypedArray())
         } catch (e: DictionaryException) {
             Log.d(TAG, "onLookup aborted with DictionaryException: ${e.message}")
@@ -291,6 +548,517 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     }
 
     /**
+     * Stores one lookup's link contexts together with its entries, so tapping a link updates
+     * the entries of the lookup that produced it (not whichever lookup ran last).
+     */
+    private fun registerAnkiLookup(links: AnkiLookupLinks, entries: List<DictionaryEntry>) {
+        if (links.contexts.isEmpty() && links.kanjiLinkOrigins.isEmpty()) return
+        ankiLookups[links.token] = AnkiLookup(entries, links.contexts.toList(), links.kanjiLinkOrigins.toList())
+    }
+
+    private fun ankiLinkContext(ref: AnkiLinkRef): AnkiLinkContext? =
+        ankiLookups[ref.token]?.contexts?.getOrNull(ref.entry)
+
+    /**
+     * What a kanji headword link's `origin_ref=<token>.<index>` parameter refers to, or null if
+     * the parameter is missing or malformed, or its lookup has been evicted.
+     */
+    private fun ankiKanjiLinkOrigin(originRef: String?): AnkiKanjiLinkOrigin? {
+        if (originRef == null) return null
+        val separator = originRef.lastIndexOf('.')
+        if (separator <= 0) return null
+        val index = originRef.substring(separator + 1).toIntOrNull() ?: return null
+        return ankiLookups[originRef.substring(0, separator)]?.kanjiLinkOrigins?.getOrNull(index)
+    }
+
+    /**
+     * Adds `origin_ref=<token>.<index>` to each of [entry]'s kanji headword links, pointing at
+     * [origin], so a kanji note made after following the link gets the sentence the term was
+     * found in and the term lookup's query. The original's kanji links do the same by carrying
+     * the popup's sentence and full query into the kanji lookup (display.js, _onKanjiLookup).
+     * Only a reference fits in the link: the host hands the link target to onLookup verbatim
+     * and caps the length of link URLs.
+     */
+    private fun withKanjiLinkOrigins(
+        entry: DictionaryEntry,
+        origin: AnkiKanjiLinkOrigin,
+        links: AnkiLookupLinks
+    ): DictionaryEntry {
+        val spans = entry.headwordSpans ?: return entry
+        if (spans.none { it.linkUrl?.startsWith(KANJI_LINK_PREFIX) == true }) return entry
+        val ref = "${links.token}.${links.kanjiLinkOrigins.size}"
+        links.kanjiLinkOrigins.add(origin)
+        val linkedSpans = spans.map { span ->
+            val url = span.linkUrl
+            if (url != null && url.startsWith(KANJI_LINK_PREFIX)) {
+                HeadwordSpan(startIndex = span.startIndex, endIndex = span.endIndex, linkUrl = "$url&origin_ref=$ref")
+            } else {
+                span
+            }
+        }
+        return DictionaryEntry(
+            headword = entry.headword,
+            pronunciation = entry.pronunciation,
+            headwordSpans = linkedSpans.toTypedArray(),
+            body = entry.body,
+            displayFlags = entry.displayFlags
+        )
+    }
+
+    /**
+     * The note data for the action link [link] (built on first request), or null if its
+     * lookup was never registered or has been evicted.
+     */
+    internal suspend fun ankiNoteDataForLink(link: String): AnkiNoteData? =
+        parseAnkiAddLink(link)?.let { ankiLinkContext(it) }?.noteData()
+
+    // Plain shape glyphs, not color emoji: a color emoji carries its own fixed color and
+    // ignores InlineStyle.foregroundColor, which would defeat coloring the links by their
+    // status. These render in the link's color instead, like the original's single-color SVGs.
+    private fun AnkiCardIcon.glyph(): String = when (this) {
+        AnkiCardIcon.BIG_CIRCLE -> "●"
+        AnkiCardIcon.SMALL_CIRCLE -> "◉"
+        AnkiCardIcon.SQUARE -> "■"
+        AnkiCardIcon.DIAMOND -> "◆"
+    }
+
+    /**
+     * The text of [format]'s action link: its shape glyph, then "Add", or, once a tap on it has
+     * written a note, what that tap did.
+     */
+    private fun ankiLinkLabel(format: AnkiCardFormat, write: AnkiNoteWrite?): String {
+        val label = when (write) {
+            null -> R.string.anki_add_link_label
+            AnkiNoteWrite.ADDED -> R.string.anki_added_link_label
+            AnkiNoteWrite.OVERWRITTEN -> R.string.anki_overwritten_link_label
+        }
+        return "${format.icon.glyph()} ${getString(label, format.name)}"
+    }
+
+    // Links are rendered in the "Add" color without checking for duplicates: that would need one
+    // findDuplicateNotes ContentProvider round-trip per configured card format on every
+    // single lookup (a hot path). The check waits until the user taps one of an entry's links,
+    // when an AnkiDroid round-trip is expected anyway, and then covers that entry's links only
+    // (see checkOtherAnkiLinks). The same reasoning is why existing note tags/flags aren't
+    // previewed before tapping Add either (see the doc comment on AnkiSettings in AnkiSettings.kt).
+    private fun appendAnkiActionLinks(
+        entry: DictionaryEntry,
+        formats: List<AnkiCardFormat>,
+        settings: AnkiSettings,
+        links: AnkiLookupLinks,
+        buildNoteData: suspend () -> AnkiNoteData
+    ): DictionaryEntry {
+        if (formats.isEmpty()) return entry
+        val entryIndex = links.contexts.size
+        links.contexts.add(AnkiLinkContext(formats, settings, buildNoteData))
+        val textBuilder = StringBuilder(entry.body.text)
+        val newStyledSpans = entry.body.styledSpans?.toMutableList() ?: mutableListOf()
+
+        if (textBuilder.isNotEmpty() && !textBuilder.endsWith("\n")) {
+            textBuilder.append("\n")
+        }
+        textBuilder.append("\n")
+
+        // One link per line.
+        for ((index, format) in formats.withIndex()) {
+            if (index > 0) textBuilder.append("\n")
+            val linkStart = textBuilder.length
+            textBuilder.append(ankiLinkLabel(format, null))
+            val linkEnd = textBuilder.length
+            newStyledSpans.add(
+                StyledSpan(
+                    startIndex = linkStart,
+                    endIndex = linkEnd,
+                    style = InlineStyle(
+                        linkUrl = "action:anki_add?token=${links.token}&entry=$entryIndex&format=$index",
+                        foregroundColor = AnkiLinkStatus.CAN_ADD.color,
+                        fontSize = ANKI_LINK_FONT_SIZE
+                    )
+                )
+            )
+        }
+
+        return DictionaryEntry(
+            headword = entry.headword,
+            pronunciation = entry.pronunciation,
+            headwordSpans = entry.headwordSpans,
+            body = StyledText(
+                text = textBuilder.toString(),
+                styledSpans = newStyledSpans.toTypedArray(),
+                rubySpans = entry.body.rubySpans,
+                blockSpans = entry.body.blockSpans
+            ),
+            displayFlags = entry.displayFlags
+        )
+    }
+
+    private fun appendTermAnkiLinksIfConfigured(
+        entry: DictionaryEntry,
+        group: TermGroup,
+        sortedItems: List<TermLookupMatch>,
+        contextText: String,
+        scanStart: Int?,
+        searchQuery: String,
+        activeDictionaries: List<String>,
+        links: AnkiLookupLinks
+    ): DictionaryEntry {
+        val settings = ankiSettings
+        if (!settings.enabled) return entry
+
+        // The host passes a whole OCR block as contextText, so notes use the sentence around
+        // the match rather than the entire block.
+        val sentenceSource = scanStart?.let { AnkiSentenceSource.of(contextText, it, it + group.maxMatchedLength) }
+        val hasKanjiFormat = settings.cardFormats.any { it.type == AnkiEntryType.KANJI && it.isComplete() }
+        val linkedEntry = if (hasKanjiFormat) {
+            withKanjiLinkOrigins(entry, AnkiKanjiLinkOrigin(sentenceSource, searchQuery), links)
+        } else {
+            entry
+        }
+
+        val formats = settings.cardFormats.filter {
+            // Excludes incomplete formats rather than rendering an Add link that would fail
+            // at AnkiDroid's addNote() with an invalid deck/model id.
+            it.type == AnkiEntryType.TERM && it.isComplete()
+        }
+        if (formats.isEmpty()) return linkedEntry
+
+        // Only cheap values are captured here; the queries and conversions run at tap time.
+        val groupTerms = sortedItems.map { it.term }
+        val inflectionRuleChains = sortedItems.map { it.deinflectionRules }.distinct()
+        val groupExpression = group.expression
+        val groupReading = group.reading
+
+        return appendAnkiActionLinks(linkedEntry, formats, settings, links) {
+            val primaryTerm = groupTerms.first()
+            val tagMetaList = groupTerms.map { it.dictionary }.distinct().flatMap { dictionary ->
+                try {
+                    db.tagMetaDao().findAllForDictionary(dictionary)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+            // Frequency dictionaries are standalone (no term_bank of their own), so their
+            // term_meta rows live under a different dictionary title than this term's own -
+            // query across every active dictionary, not just primaryTerm.dictionary. This
+            // matches YomitanRenderer.renderTermEntries's established pattern.
+            val termMetaList = try {
+                db.termMetaDao().findByExpressionBulk(listOf(primaryTerm.expression), activeDictionaries)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val dictionaryStyles = groupTerms.map { it.dictionary }.distinct().associateWith { dictionary ->
+                try {
+                    db.dictionaryDao().getDictionaryByTitle(dictionary)?.styles ?: ""
+                } catch (e: Exception) {
+                    ""
+                }
+            }
+
+            val cloze = sentenceSource?.let {
+                AnkiNoteDataBuilder.buildCloze(it.extract(), it.matchedText, groupExpression, groupReading)
+            }
+
+            AnkiNoteDataBuilder.buildTermNoteData(
+                terms = groupTerms,
+                tagMetaList = tagMetaList,
+                termMetaList = termMetaList,
+                cloze = cloze,
+                dictionaryOrder = activeDictionaries,
+                inflectionRuleChains = inflectionRuleChains,
+                dictionaryStyles = dictionaryStyles,
+                searchQuery = searchQuery,
+                frequencyModes = ankiFrequencyModes(termMetaList.map { it.dictionary })
+            )
+        }
+    }
+
+    /**
+     * [kanji] is the entry's own kanji dictionary row. [sentenceSource] is the match the note's
+     * sentence and cloze come from: the tapped kanji itself, or, for a kanji reached through a
+     * term's headword link, that term's match. In the second case the cloze is split at the
+     * term's position with a body as long as the kanji, as the original's getCloze does with the
+     * sentence a kanji link carries over. [searchQuery] is the lookup's query, for
+     * `{search-query}`.
+     */
+    private fun appendKanjiAnkiLinksIfConfigured(
+        entry: DictionaryEntry,
+        kanji: KanjiEntity,
+        activeDictionaries: List<String>,
+        links: AnkiLookupLinks,
+        sentenceSource: AnkiSentenceSource?,
+        searchQuery: String
+    ): DictionaryEntry {
+        val settings = ankiSettings
+        if (!settings.enabled) return entry
+        val formats = settings.cardFormats.filter {
+            it.type == AnkiEntryType.KANJI && it.isComplete()
+        }
+        if (formats.isEmpty()) return entry
+
+        // Only cheap values are captured here; the queries and conversions run at tap time.
+        return appendAnkiActionLinks(entry, formats, settings, links) {
+            val tagMetaList = try {
+                db.tagMetaDao().findAllForDictionary(kanji.dictionary)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val kanjiMetaList = try {
+                db.kanjiMetaDao().findByCharacterBulk(listOf(kanji.character), activeDictionaries)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val cloze = sentenceSource?.let {
+                AnkiNoteDataBuilder.buildCloze(it.extract(), kanji.character, "", "")
+            }
+            AnkiNoteDataBuilder.buildKanjiNoteData(
+                kanji = kanji,
+                tagMetaList = tagMetaList,
+                kanjiMetaList = kanjiMetaList,
+                cloze = cloze,
+                dictionaryOrder = activeDictionaries,
+                searchQuery = searchQuery,
+                frequencyModes = ankiFrequencyModes(kanjiMetaList.map { it.dictionary })
+            )
+        }
+    }
+
+    /**
+     * The `frequencyMode` each of [dictionaries] declares in its index.json, for the frequency
+     * markers that only count rank-based or occurrence-based values. A dictionary that declares
+     * none is left out.
+     */
+    private suspend fun ankiFrequencyModes(dictionaries: Collection<String>): Map<String, String> =
+        dictionaries.distinct().mapNotNull { title ->
+            try {
+                db.dictionaryDao().getDictionaryByTitle(title)?.frequencyMode?.let { title to it }
+            } catch (e: Exception) {
+                null
+            }
+        }.toMap()
+
+    private fun entryHasLink(entry: DictionaryEntry, ref: AnkiLinkRef): Boolean =
+        entry.body.styledSpans?.any { parseAnkiAddLink(it.style.linkUrl) == ref } == true
+
+    /**
+     * [entry] with each of its action links for [ref] relabeled from [context]'s writes and
+     * recolored from its statuses. A label can change length, so every index at or after the end
+     * of a relabeled link (text, styled, ruby and block spans alike) is shifted to match, keeping
+     * the rest of the entry in place.
+     */
+    private fun restyleAnkiLinks(entry: DictionaryEntry, ref: AnkiLinkRef, context: AnkiLinkContext): DictionaryEntry {
+        val body = entry.body
+        var text = body.text
+        var styledSpans = body.styledSpans?.toList() ?: return entry
+        var rubySpans = body.rubySpans?.toList()
+        var blockSpans = body.blockSpans?.toList()
+        // The last link first: relabeling a link only moves what comes after it, so the links
+        // still to be relabeled keep their indices.
+        val links =
+            styledSpans.filter { parseAnkiAddLink(it.style.linkUrl) == ref }.sortedByDescending { it.startIndex }
+        for (link in links) {
+            val formatIndex = parseAnkiAddLinkFormat(link.style.linkUrl) ?: continue
+            val format = context.formats.getOrNull(formatIndex) ?: continue
+            val label = ankiLinkLabel(format, context.writes[formatIndex])
+            val color = (context.statuses[formatIndex] ?: AnkiLinkStatus.CAN_ADD).color
+            val end = link.endIndex
+            val delta = label.length - (end - link.startIndex)
+            fun shift(index: Int) = if (index >= end) index + delta else index
+            text = text.replaceRange(link.startIndex, end, label)
+            styledSpans = styledSpans.map { span ->
+                if (span.startIndex == link.startIndex && span.style.linkUrl == link.style.linkUrl) {
+                    StyledSpan(
+                        startIndex = span.startIndex,
+                        endIndex = span.startIndex + label.length,
+                        style = InlineStyle(
+                            linkUrl = span.style.linkUrl,
+                            foregroundColor = color,
+                            fontSize = span.style.fontSize
+                        )
+                    )
+                } else {
+                    StyledSpan(startIndex = shift(span.startIndex), endIndex = shift(span.endIndex), style = span.style)
+                }
+            }
+            rubySpans = rubySpans?.map {
+                RubySpan(startIndex = shift(it.startIndex), endIndex = shift(it.endIndex), rubyText = it.rubyText)
+            }
+            blockSpans = blockSpans?.map {
+                BlockSpan(
+                    startIndex = shift(it.startIndex),
+                    endIndex = shift(it.endIndex),
+                    blockType = it.blockType,
+                    indentLevel = it.indentLevel,
+                    listMarker = it.listMarker,
+                    backgroundColor = it.backgroundColor
+                )
+            }
+        }
+        return DictionaryEntry(
+            headword = entry.headword,
+            pronunciation = entry.pronunciation,
+            headwordSpans = entry.headwordSpans,
+            body = StyledText(
+                text = text,
+                styledSpans = styledSpans.toTypedArray(),
+                rubySpans = rubySpans?.toTypedArray(),
+                blockSpans = blockSpans?.toTypedArray()
+            ),
+            displayFlags = entry.displayFlags
+        )
+    }
+
+    /**
+     * Applies [update] to the writes and statuses of [ref]'s links, and restyles those links in
+     * the lookup's stored entries. Returns the lookup's entries to show, or null if the lookup is
+     * no longer tracked. The host replaces its whole displayed result with what an UpdateResult
+     * carries, so the entries returned must be those of the lookup that produced [ref], never
+     * another lookup's.
+     */
+    private fun updateAnkiLinks(ref: AnkiLinkRef, update: (AnkiLinkContext) -> Unit): Array<DictionaryEntry>? {
+        val lookup = ankiLookups[ref.token] ?: return null
+        synchronized(lookup) {
+            val context = lookup.contexts.getOrNull(ref.entry) ?: return null
+            update(context)
+            lookup.entries =
+                lookup.entries.map { if (entryHasLink(it, ref)) restyleAnkiLinks(it, ref, context) else it }
+            return lookup.entries.toTypedArray()
+        }
+    }
+
+    /**
+     * The duplicates of a note of [format] whose first field is [key], searched the way
+     * [settings] ask for, or null if they ask for no search (duplicate checking off, or an empty
+     * first field, which cannot be searched for).
+     */
+    private fun findAnkiDuplicates(
+        settings: AnkiSettings,
+        format: AnkiCardFormat,
+        key: String
+    ): List<AnkiNoteInfo>? {
+        if (!settings.checkForDuplicates || key.isEmpty()) return null
+        return ankiDroidClient.findDuplicateNotes(
+            modelId = format.modelId,
+            deckId = format.deckId,
+            key = key,
+            scope = settings.duplicateScope,
+            checkAllModels = settings.duplicateScopeCheckAllModels
+        )
+    }
+
+    /**
+     * The status of each of [context]'s formats except [tappedIndex], found with the duplicate
+     * search a tap on its link would run: one AnkiDroid query per format, plus one field-list
+     * query per note type not already in [fieldLists]. Formats the search does not run for, or
+     * fails for, are left out, keeping whatever status they had.
+     */
+    private suspend fun checkOtherAnkiLinks(
+        context: AnkiLinkContext,
+        tappedIndex: Int,
+        fieldLists: MutableMap<Long, List<String>>
+    ): Map<Int, AnkiLinkStatus> {
+        val settings = context.settings
+        if (!settings.checkForDuplicates) return emptyMap()
+        val statuses = HashMap<Int, AnkiLinkStatus>()
+        for ((index, format) in context.formats.withIndex()) {
+            if (index == tappedIndex) continue
+            try {
+                val fieldNames = fieldLists.getOrPut(format.modelId) { ankiDroidClient.getFieldList(format.modelId) }
+                val key = fieldNames.firstOrNull()
+                    ?.let { format.fields[it] }
+                    ?.let { AnkiTemplateEngine.renderField(it.value, context.noteData()).text }
+                    ?: ""
+                val duplicates = findAnkiDuplicates(settings, format, key) ?: continue
+                statuses[index] = AnkiLinkStatus.of(
+                    settings.duplicateBehavior,
+                    hasDuplicate = duplicates.isNotEmpty(),
+                    hasSameTypeDuplicate = duplicates.any { it.modelId == format.modelId }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The tapped note is already written; a failed check only leaves a color as it was.
+                Log.w(TAG, "AnkiDroid duplicate check failed for card format ${format.name}", e)
+            }
+        }
+        return statuses
+    }
+
+    private suspend fun buildEntriesFromTermGroups(
+        sortedGroups: List<TermGroup>,
+        activeDictionaries: List<String>,
+        contextText: String,
+        scanStart: Int?,
+        searchQuery: String,
+        links: AnkiLookupLinks
+    ): List<DictionaryEntry> {
+        val entries = mutableListOf<DictionaryEntry>()
+        for (group in sortedGroups) {
+            val sortedItems = group.items.sortedWith(
+                compareBy<TermLookupMatch> { it.dictionaryIndex }
+                    .thenByDescending { it.term.score }
+                    .thenByDescending { it.term.sequence }
+            )
+
+            val itemGroups = mutableListOf<MutableList<TermLookupMatch>>()
+            val sequenceToGroup = mutableMapOf<Pair<String, Long>, MutableList<TermLookupMatch>>()
+
+            for (item in sortedItems) {
+                val seq = item.term.sequence
+                val dict = item.term.dictionary
+                if (seq != null && seq >= 0L) {
+                    val key = Pair(dict, seq)
+                    val seqGroup = sequenceToGroup.getOrPut(key) {
+                        val newGroup = mutableListOf<TermLookupMatch>()
+                        itemGroups.add(newGroup)
+                        newGroup
+                    }
+                    seqGroup.add(item)
+                } else {
+                    itemGroups.add(mutableListOf(item))
+                }
+            }
+
+            val renderedEntries = mutableListOf<DictionaryEntry>()
+            for (itemGroup in itemGroups) {
+                val primaryMatch = itemGroup.first()
+                val dictEntity = db.dictionaryDao().getDictionaryByTitle(primaryMatch.term.dictionary)
+                val styles = dictEntity?.styles ?: ""
+
+                val terms = itemGroup.map { it.term }
+                val entry = renderer.renderTermEntries(terms, styles, activeDictionaries)
+
+                val finalEntry = if (primaryMatch.deinflectionRules.isNotEmpty()) {
+                    decorateDeinflection(entry, primaryMatch.deinflectionRules)
+                } else {
+                    entry
+                }
+                renderedEntries.add(finalEntry)
+            }
+
+            val mergedEntry = mergeDictionaryEntries(
+                group.expression,
+                renderedEntries.firstOrNull()?.pronunciation,
+                renderedEntries.firstOrNull()?.headwordSpans,
+                renderedEntries
+            )
+
+            entries.add(
+                appendTermAnkiLinksIfConfigured(
+                    mergedEntry,
+                    group,
+                    sortedItems,
+                    contextText,
+                    scanStart,
+                    searchQuery,
+                    activeDictionaries,
+                    links
+                )
+            )
+        }
+        return entries
+    }
+
+    /**
      * Perform a direct kanji-dictionary lookup for a single character.
      *
      * This is the port of display-generator.js::_setContentTermsOrKanji('kanji', char):
@@ -300,7 +1068,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      *
      * Called from lookupInternalLink when the parsed query params contain a "kanji" key,
      * which is produced by buildKanjiHeadwordSpans in TermEntryRenderer (link URL format:
-     * "lookup:?kanji=<char>").
+     * "lookup:?kanji=<char>", plus "&origin_ref=<token>.<index>" when withKanjiLinkOrigins
+     * added one).
      *
      * Returns an empty list (not an exception) when no kanji entry is found so that
      * onLookup can throw the standard WORD_NOT_FOUND exception with a proper message.
@@ -309,10 +1078,16 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      *
      * @param character The single kanji character to look up (e.g. "日")
      * @param activeDictionaries The currently enabled dictionaries, in priority order
+     * @param sentenceSource The match of the term whose headword link was followed, if its
+     *   lookup recorded one and is still cached; used for the kanji note's sentence.
+     * @param searchQuery The lookup's query, for the kanji note's `{search-query}`.
      */
     private suspend fun lookupKanjiDirect(
         character: String,
-        activeDictionaries: List<String>
+        activeDictionaries: List<String>,
+        links: AnkiLookupLinks,
+        sentenceSource: AnkiSentenceSource?,
+        searchQuery: String
     ): List<DictionaryEntry> {
         if (character.isEmpty()) return emptyList()
 
@@ -324,7 +1099,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             return listOf(buildNoKanjiDictionaryEntry(character))
         }
 
-        return renderKanjiEntries(character, activeDictionaries)
+        return renderKanjiEntries(character, activeDictionaries, links, sentenceSource, searchQuery)
     }
 
     /**
@@ -335,10 +1110,18 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * KanjiDictionaryEntry and sorts them by dictionary index: entries from different kanji
      * dictionaries are shown separately, never merged into one. sortedBy is stable, so rows
      * from the same dictionary keep their database order, as in the original.
+     *
+     * Each entry gets its own Anki links, built from its own row, as each of the original's
+     * kanji entries has its own add buttons. [sentenceSource] is the match every note's
+     * sentence comes from and [searchQuery] the lookup's query (see
+     * appendKanjiAnkiLinksIfConfigured).
      */
     private suspend fun renderKanjiEntries(
         character: String,
-        activeDictionaries: List<String>
+        activeDictionaries: List<String>,
+        links: AnkiLookupLinks,
+        sentenceSource: AnkiSentenceSource?,
+        searchQuery: String
     ): List<DictionaryEntry> {
         val kanjiMatches = db.kanjiDao().findByCharacterBulk(listOf(character), activeDictionaries)
         val sortedMatches = kanjiMatches.sortedBy { match ->
@@ -348,7 +1131,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         return sortedMatches.map { match ->
             val dictEntity = db.dictionaryDao().getDictionaryByTitle(match.dictionary)
             val styles = dictEntity?.styles ?: ""
-            renderer.renderKanjiEntry(match, styles, activeDictionaries)
+            val entry = renderer.renderKanjiEntry(match, styles, activeDictionaries)
+            appendKanjiAnkiLinksIfConfigured(entry, match, activeDictionaries, links, sentenceSource, searchQuery)
         }
     }
 
@@ -391,7 +1175,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
     private suspend fun lookupInternalLink(
         contextText: String,
-        activeDictionaries: List<String>
+        activeDictionaries: List<String>,
+        links: AnkiLookupLinks
     ): List<DictionaryEntry> {
         val params = parseQueryParams(contextText)
 
@@ -401,7 +1186,11 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         // bypassing the term path entirely. See _setContentTermsOrKanji('kanji', char).
         val kanjiChar = params["kanji"]
         if (kanjiChar != null) {
-            return lookupKanjiDirect(kanjiChar, activeDictionaries)
+            val origin = ankiKanjiLinkOrigin(params["origin_ref"])
+            // As the original's _createSearchParams: the kanji lookup keeps the term lookup's
+            // query when that is longer than the kanji itself.
+            val searchQuery = origin?.searchQuery?.takeIf { it.length > kanjiChar.length } ?: kanjiChar
+            return lookupKanjiDirect(kanjiChar, activeDictionaries, links, origin?.sentenceSource, searchQuery)
         }
 
         val processedTermIds = mutableSetOf<Long>()
@@ -481,62 +1270,14 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 .thenByDescending { it.maxSequence }
         )
 
-        val entries = mutableListOf<DictionaryEntry>()
-        for (group in sortedGroups) {
-            val sortedItems = group.items.sortedWith(
-                compareBy<TermLookupMatch> { it.dictionaryIndex }
-                    .thenByDescending { it.term.score }
-                    .thenByDescending { it.term.sequence }
-            )
-
-            val itemGroups = mutableListOf<MutableList<TermLookupMatch>>()
-            val sequenceToGroup = mutableMapOf<Pair<String, Long>, MutableList<TermLookupMatch>>()
-
-            for (item in sortedItems) {
-                val seq = item.term.sequence
-                val dict = item.term.dictionary
-                if (seq != null && seq >= 0L) {
-                    val key = Pair(dict, seq)
-                    val seqGroup = sequenceToGroup.getOrPut(key) {
-                        val newGroup = mutableListOf<TermLookupMatch>()
-                        itemGroups.add(newGroup)
-                        newGroup
-                    }
-                    seqGroup.add(item)
-                } else {
-                    itemGroups.add(mutableListOf(item))
-                }
-            }
-
-            val renderedEntries = mutableListOf<DictionaryEntry>()
-            for (itemGroup in itemGroups) {
-                val primaryMatch = itemGroup.first()
-                val dictEntity = db.dictionaryDao().getDictionaryByTitle(primaryMatch.term.dictionary)
-                val styles = dictEntity?.styles ?: ""
-
-                val terms = itemGroup.map { it.term }
-                val entry = renderer.renderTermEntries(terms, styles, activeDictionaries)
-
-                // If deinflection rules were applied, prepend them to the body as a custom badge
-                val finalEntry = if (primaryMatch.deinflectionRules.isNotEmpty()) {
-                    decorateDeinflection(entry, primaryMatch.deinflectionRules)
-                } else {
-                    entry
-                }
-                renderedEntries.add(finalEntry)
-            }
-
-            entries.add(
-                mergeDictionaryEntries(
-                    group.expression,
-                    renderedEntries.firstOrNull()?.pronunciation,
-                    renderedEntries.firstOrNull()?.headwordSpans,
-                    renderedEntries
-                )
-            )
-        }
-
-        return entries
+        return buildEntriesFromTermGroups(
+            sortedGroups,
+            activeDictionaries,
+            contextText,
+            scanStart = null,
+            searchQuery = query,
+            links = links
+        )
     }
 
     private suspend fun scanAndDeinflectLookup(
@@ -544,7 +1285,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         start: Int,
         maxLen: Int,
         minLen: Int,
-        activeDictionaries: List<String>
+        activeDictionaries: List<String>,
+        links: AnkiLookupLinks
     ): List<DictionaryEntry> {
         val matchesList = mutableListOf<TermLookupMatch>()
         val processedTermIds = mutableSetOf<Long>()
@@ -622,61 +1364,17 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 .thenByDescending { it.maxSequence }
         )
 
-        val entries = mutableListOf<DictionaryEntry>()
-        for (group in sortedGroups) {
-            val sortedItems = group.items.sortedWith(
-                compareBy<TermLookupMatch> { it.dictionaryIndex }
-                    .thenByDescending { it.term.score }
-                    .thenByDescending { it.term.sequence }
-            )
-
-            val itemGroups = mutableListOf<MutableList<TermLookupMatch>>()
-            val sequenceToGroup = mutableMapOf<Pair<String, Long>, MutableList<TermLookupMatch>>()
-
-            for (item in sortedItems) {
-                val seq = item.term.sequence
-                val dict = item.term.dictionary
-                if (seq != null && seq >= 0L) {
-                    val key = Pair(dict, seq)
-                    val seqGroup = sequenceToGroup.getOrPut(key) {
-                        val newGroup = mutableListOf<TermLookupMatch>()
-                        itemGroups.add(newGroup)
-                        newGroup
-                    }
-                    seqGroup.add(item)
-                } else {
-                    itemGroups.add(mutableListOf(item))
-                }
-            }
-
-            val renderedEntries = mutableListOf<DictionaryEntry>()
-            for (itemGroup in itemGroups) {
-                val primaryMatch = itemGroup.first()
-                val dictEntity = db.dictionaryDao().getDictionaryByTitle(primaryMatch.term.dictionary)
-                val styles = dictEntity?.styles ?: ""
-
-                val terms = itemGroup.map { it.term }
-                val entry = renderer.renderTermEntries(terms, styles, activeDictionaries)
-
-                // If deinflection rules were applied, prepend them to the body as a custom badge
-                val finalEntry = if (primaryMatch.deinflectionRules.isNotEmpty()) {
-                    decorateDeinflection(entry, primaryMatch.deinflectionRules)
-                } else {
-                    entry
-                }
-                renderedEntries.add(finalEntry)
-            }
-
-            val mergedEntry =
-                mergeDictionaryEntries(
-                    group.expression,
-                    renderedEntries.firstOrNull()?.pronunciation,
-                    renderedEntries.firstOrNull()?.headwordSpans,
-                    renderedEntries
-                )
-            entries.add(mergedEntry)
-        }
-        return entries
+        // The original's popup query is the scanned text cut to the longest match of any result
+        // (text-scanner.js, _findTermDictionaryEntries), the same for every entry.
+        val longestMatch = sortedGroups.maxOfOrNull { it.maxMatchedLength } ?: 0
+        return buildEntriesFromTermGroups(
+            sortedGroups,
+            activeDictionaries,
+            contextText,
+            scanStart = start,
+            searchQuery = contextText.substring(start, minOf(start + longestMatch, contextText.length)),
+            links = links
+        )
     }
 
     private fun decorateDeinflection(
@@ -803,7 +1501,214 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         return map
     }
 
+    override suspend fun onExecuteCustomAction(actionPayload: String): CustomActionResult {
+        return when {
+            actionPayload.startsWith("anki_add?") -> try {
+                executeAnkiAddAction(actionPayload)
+            } catch (e: DictionaryException) {
+                throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // AnkiDroid's ContentProvider can throw (permission revoked mid-call, collection
+                // unavailable, provider crash). Report it instead of letting it escape raw.
+                Log.w(TAG, "AnkiDroid call failed", e)
+                throw DictionaryException(
+                    DictionaryErrorCode.INTERNAL_ERROR,
+                    getString(R.string.error_anki_unexpected, getString(R.string.app_name))
+                )
+            }
+
+            else -> throw DictionaryException(
+                DictionaryErrorCode.INTERNAL_ERROR,
+                "Unknown custom action: $actionPayload"
+            )
+        }
+    }
+
+    private suspend fun executeAnkiAddAction(actionPayload: String): CustomActionResult {
+        val queryPart = actionPayload.removePrefix("anki_add?")
+        val params = parseQueryParams("?$queryPart")
+        val ref = parseAnkiAddLink(actionPayload)
+            ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_stale_link))
+        val formatIndex = params["format"]?.toIntOrNull()
+            ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_stale_link))
+
+        val linkContext = ankiLinkContext(ref)
+            ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_stale_link))
+        // Resolved against the list captured when the link was rendered, not the current
+        // settings, so the index always means the format the user tapped.
+        val format = linkContext.formats.getOrNull(formatIndex)
+            ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_stale_link))
+        val settings = linkContext.settings
+
+        // The snapshot only decides which format and duplicate rules apply; whether export is
+        // allowed at all is always the live setting, so turning it off takes effect at once.
+        if (!AnkiSettingsStore.load(applicationContext).enabled) {
+            throw DictionaryException(
+                DictionaryErrorCode.INTERNAL_ERROR,
+                getString(R.string.error_anki_export_disabled)
+            )
+        }
+
+        if (!ankiDroidClient.isAnkiDroidInstalled()) {
+            throw DictionaryException(
+                DictionaryErrorCode.INTERNAL_ERROR,
+                getString(R.string.error_ankidroid_not_installed)
+            )
+        }
+        if (!ankiDroidClient.hasPermission()) {
+            throw DictionaryException(
+                DictionaryErrorCode.INTERNAL_ERROR,
+                getString(R.string.error_ankidroid_no_permission)
+            )
+        }
+
+        // Only the note type's current fields are rendered, unlike the original, which renders
+        // every stored field. AddContentApi takes a note's fields as a positional array in the
+        // note type's field order (joined into FlashCardsContract's FLDS column), with no field
+        // names, so a stored field the note type no longer has has no slot and can never be
+        // written. Rendering it anyway would only report marker errors in text that never
+        // reaches the note.
+        val fieldNames = ankiDroidClient.getFieldList(format.modelId)
+        // AnkiDroid adds a note to a deck id that no longer exists without complaint, leaving its
+        // cards in no deck, so a deleted deck or note type is refused here, as AnkiConnect refuses
+        // a deck or note type it cannot find.
+        if (fieldNames.isEmpty()) {
+            throw DictionaryException(
+                DictionaryErrorCode.INTERNAL_ERROR,
+                getString(R.string.error_anki_note_type_missing, format.name, format.modelName)
+            )
+        }
+        if (format.deckId !in ankiDroidClient.getDeckList()) {
+            throw DictionaryException(
+                DictionaryErrorCode.INTERNAL_ERROR,
+                getString(R.string.error_anki_deck_missing, format.name, format.deckName)
+            )
+        }
+        val noteData = linkContext.noteData()
+        val rendered = fieldNames.map { fieldName ->
+            format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, noteData) }
+        }
+        val fieldValues = rendered.map { it?.text ?: "" }
+        // Like the original, an unknown marker does not stop the export: it is written into the
+        // field as `{marker-render-error}` and reported once the note is saved.
+        val unknownMarkers = rendered.flatMap { it?.unknownMarkers ?: emptyList() }.distinct()
+
+        val searched = findAnkiDuplicates(settings, format, fieldValues.firstOrNull() ?: "")
+        val duplicates = searched ?: emptyList()
+        // Once written, the note is a duplicate of the format's own note type for the next tap's
+        // search, as the original's button reflects after an add. Without a search, the next
+        // tap just adds another note.
+        val statusAfterWrite = if (searched != null) {
+            AnkiLinkStatus.of(settings.duplicateBehavior, hasDuplicate = true, hasSameTypeDuplicate = true)
+        } else {
+            AnkiLinkStatus.ADD_DUPLICATE
+        }
+
+        if (duplicates.isNotEmpty()) {
+            when (settings.duplicateBehavior) {
+                AnkiDuplicateBehavior.PREVENT -> {
+                    // The message replaces the refresh, so the link turns gray the next time a
+                    // tap refreshes the lookup.
+                    updateAnkiLinks(ref) { it.statuses[formatIndex] = AnkiLinkStatus.PREVENTED }
+                    return CustomActionResult.SuccessMessage(getString(R.string.anki_note_already_exists))
+                }
+
+                AnkiDuplicateBehavior.OVERWRITE -> {
+                    // A duplicate search across all note types can return notes whose fields
+                    // differ from this format's, and a positional merge would corrupt them, so
+                    // only a note of the format's own note type is ever overwritten. Without
+                    // one, execution falls through and a new note is added.
+                    val existing = duplicates.firstOrNull { it.modelId == format.modelId }
+                    if (existing != null) {
+                        val mergedFields = fieldNames.mapIndexed { i, fieldName ->
+                            val overwriteMode =
+                                format.fields[fieldName]?.overwriteMode ?: AnkiFieldOverwriteMode.COALESCE
+                            AnkiFieldMerger.merge(existing.fields.getOrElse(i) { "" }, fieldValues[i], overwriteMode)
+                        }
+                        val updated = ankiDroidClient.updateNoteFields(existing.id, mergedFields)
+                        return if (updated) {
+                            finishAnkiWrite(
+                                ref,
+                                linkContext,
+                                formatIndex,
+                                added = false,
+                                statusAfterWrite,
+                                fieldNames,
+                                unknownMarkers
+                            )
+                        } else {
+                            throw DictionaryException(
+                                DictionaryErrorCode.INTERNAL_ERROR,
+                                getString(R.string.error_anki_update_failed)
+                            )
+                        }
+                    }
+                }
+
+                AnkiDuplicateBehavior.ALWAYS_ADD -> {
+                    // fall through to add below
+                }
+            }
+        }
+
+        val noteId = ankiDroidClient.addNote(format.modelId, format.deckId, fieldValues, settings.tags.toSet())
+        return if (noteId != null) {
+            finishAnkiWrite(ref, linkContext, formatIndex, added = true, statusAfterWrite, fieldNames, unknownMarkers)
+        } else {
+            throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_add_failed))
+        }
+    }
+
+    /**
+     * Result of a successful write. The tapped link is relabeled ("Added" or "Overwritten") and
+     * colored by [statusAfterWrite], every other link of the entry is colored by a fresh
+     * duplicate check (see checkOtherAnkiLinks), and the lookup's entries are returned to show
+     * them. With unknown markers a plain message is returned instead (an UpdateResult cannot
+     * carry text), so the warning reaches the user; the tapped link's new label and color then
+     * show the next time a tap refreshes the lookup, and the other links are not checked. If the
+     * lookup is no longer tracked, the note was still written, so a plain confirmation is
+     * returned.
+     */
+    private suspend fun finishAnkiWrite(
+        ref: AnkiLinkRef,
+        context: AnkiLinkContext,
+        formatIndex: Int,
+        added: Boolean,
+        statusAfterWrite: AnkiLinkStatus,
+        fieldNames: List<String>,
+        unknownMarkers: List<String>
+    ): CustomActionResult {
+        val format = context.formats[formatIndex]
+        val write = if (added) AnkiNoteWrite.ADDED else AnkiNoteWrite.OVERWRITTEN
+        val otherStatuses = if (unknownMarkers.isEmpty() && ankiLookups.containsKey(ref.token)) {
+            checkOtherAnkiLinks(context, formatIndex, mutableMapOf(format.modelId to fieldNames))
+        } else {
+            emptyMap()
+        }
+        val entries = updateAnkiLinks(ref) {
+            it.writes[formatIndex] = write
+            it.statuses[formatIndex] = statusAfterWrite
+            it.statuses.putAll(otherStatuses)
+        }
+        if (unknownMarkers.isEmpty()) {
+            if (entries != null) return CustomActionResult.UpdateResult(DictionaryResult(entries = entries))
+            return CustomActionResult.SuccessMessage(
+                getString(if (added) R.string.anki_note_added else R.string.anki_note_updated)
+            )
+        }
+        return CustomActionResult.SuccessMessage(
+            getString(
+                if (added) R.string.anki_note_added_unknown_markers else R.string.anki_note_updated_unknown_markers,
+                format.name,
+                unknownMarkers.joinToString(", ") { "{$it}" }
+            )
+        )
+    }
+
     override fun onShutdown() {
         Log.d(TAG, "Shutting down service connection")
+        ankiLookups.clear()
     }
 }

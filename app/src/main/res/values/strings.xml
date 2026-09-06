@@ -2,6 +2,14 @@
     <string name="app_name">Yomitan for Dokuen</string>
     <string name="header_description">Offline Dictionary Installer &amp; Manager</string>
 
+    <!-- Common -->
+    <string name="deck">Deck</string>
+    <string name="delete">Delete</string>
+    <string name="download">Download</string>
+    <string name="installed">Installed</string>
+    <string name="kanji">Kanji</string>
+    <string name="overwrite">Overwrite</string>
+
     <!-- Guide Card -->
     <string name="guide_title">Getting Started</string>
     <string name="guide_step_1">Install one or more dictionaries below.</string>
@@ -19,7 +27,7 @@
     <string name="no_dictionaries_installed">No dictionaries installed yet.\nImport a local ZIP file or download one of the presets below.</string>
     <string name="dictionary_author_version">Author: %1$s • Ver: %2$s</string>
     <string name="author_unknown">Unknown</string>
-    <string name="content_description_delete_dictionary">Delete Dictionary</string>
+    <string name="delete_dictionary">Delete Dictionary</string>
     <string name="content_description_move_up">Move Up</string>
     <string name="content_description_move_down">Move Down</string>
 
@@ -31,6 +39,68 @@
     <string name="frequency_sorting_mode_occurrence_based">Occurrence-based</string>
     <string name="frequency_sorting_mode_rank_based">Rank-based</string>
     <string name="frequency_sorting_mode_auto">Auto</string>
+
+    <!-- Anki Export -->
+    <string name="tab_dictionaries">Dictionaries</string>
+    <string name="tab_anki_export">Anki Export</string>
+    <string name="anki_export_enable">Enable Anki export</string>
+    <string name="anki_export_not_installed">AnkiDroid is not installed</string>
+    <string name="anki_export_permission_needed">Permission needed</string>
+    <string name="anki_install_dialog_title">AnkiDroid required</string>
+    <string name="anki_install_dialog_body">Anki export needs the AnkiDroid app installed on this device to add cards to your collection.</string>
+    <string name="anki_install_dialog_confirm">Install AnkiDroid</string>
+    <string name="anki_permission_dialog_title">Allow Anki access</string>
+    <string name="anki_permission_dialog_body">%1$s needs permission to add and update cards in your AnkiDroid collection. You\'ll see an Android permission prompt next.</string>
+    <string name="anki_permission_dialog_confirm">Continue</string>
+    <string name="anki_action_install">Install</string>
+    <string name="anki_action_grant_permission">Grant permission</string>
+    <string name="anki_action_open_settings">Open settings</string>
+    <string name="anki_export_tags_label">Card tags</string>
+    <string name="anki_export_check_duplicates">Check for card duplicates</string>
+    <string name="anki_export_duplicate_behavior">When a duplicate is detected</string>
+    <string name="anki_duplicate_behavior_prevent">Prevent adding</string>
+    <string name="anki_duplicate_behavior_overwrite">Allow overwriting</string>
+    <string name="anki_duplicate_behavior_always_add">Allow adding</string>
+    <string name="anki_export_duplicate_scope_label">Duplicate card scope</string>
+    <string name="anki_duplicate_scope_collection">Collection</string>
+    <string name="anki_duplicate_scope_deck_root">Deck root</string>
+    <string name="anki_export_check_all_models">Check for duplicates across all models</string>
+    <string name="anki_entry_type_term">Term</string>
+    <string name="anki_overwrite_mode_coalesce">Fill if empty</string>
+    <string name="anki_overwrite_mode_coalesce_new">Overwrite if available</string>
+    <string name="anki_overwrite_mode_append">Append</string>
+    <string name="anki_overwrite_mode_prepend">Prepend</string>
+    <string name="anki_overwrite_mode_skip">Skip</string>
+    <string name="anki_card_formats_title">Card Formats</string>
+    <string name="anki_card_format_add">Add card format</string>
+    <string name="anki_card_format_name_label">Name</string>
+    <string name="anki_card_format_model_label">Model</string>
+    <string name="anki_card_format_field_marker_hint">e.g. {expression}</string>
+    <string name="anki_card_formats_empty">No card formats yet. Add one to start exporting to Anki.</string>
+    <string name="anki_card_format_delete_title">Delete card format?</string>
+    <string name="anki_card_format_delete_body">Delete \"%1$s\"? This can\'t be undone.</string>
+    <string name="anki_card_format_loading_fields">Loading fields…</string>
+    <string name="anki_card_format_no_decks">No decks available</string>
+    <string name="anki_card_format_no_models">No models available</string>
+    <string name="anki_card_format_icon_label">Button</string>
+    <string name="anki_card_icon_big_circle">Big Circle</string>
+    <string name="anki_card_icon_small_circle">Small Circle</string>
+    <string name="anki_card_icon_square">Square</string>
+    <string name="anki_card_icon_diamond">Diamond</string>
+    <string name="anki_card_format_default_name">Format %1$d</string>
+    <string name="anki_card_format_default_expression">Expression</string>
+    <string name="anki_card_format_default_reading">Reading</string>
+    <string name="anki_card_format_insert_marker">Insert marker</string>
+    <string name="anki_card_format_first_field_needs_marker">The first field must contain a marker.</string>
+    <string name="anki_export_permission_denied">Anki export needs AnkiDroid access to add cards.</string>
+    <string name="anki_card_format_limit_reached">You can have up to 5 card formats.</string>
+    <string name="anki_export_enabled_snackbar">Anki export enabled</string>
+    <string name="anki_note_added">Note added to Anki.</string>
+    <string name="anki_note_updated">Note updated in Anki.</string>
+    <string name="error_anki_export_disabled">Anki export is turned off in the plugin settings.</string>
+    <string name="anki_note_added_unknown_markers">Note added to Anki, but card format \"%1$s\" uses unknown marker(s): %2$s</string>
+    <string name="anki_note_updated_unknown_markers">Note updated in Anki, but card format \"%1$s\" uses unknown marker(s): %2$s</string>
+    <string name="anki_note_already_exists">This note already exists in Anki.</string>
 
     <!-- Plural for stats badge -->
     <plurals name="installed_dictionaries_count">
@@ -87,17 +157,12 @@
     <string name="custom_dictionary_name">Custom Yomitan Dictionary</string>
     <string name="import_warning_details">Please keep the app open.\nImporting hundreds of thousands of terms may take a few minutes.</string>
 
-    <string name="delete_dictionary_title">Delete Dictionary</string>
     <string name="delete_confirm_message">Are you sure you want to completely delete ‘%1$s’? This will free up storage space.</string>
-    <string name="delete_action">Delete</string>
     <string name="cancel_action">Cancel</string>
     <string name="ok_action">OK</string>
-    <string name="status_installed">INSTALLED</string>
-    <string name="status_download">DOWNLOAD</string>
     <string name="button_return_to_dokuen">Return to Dokuen</string>
     <string name="button_launch_dokuen">Launch Dokuen Japanese Reader</string>
     <string name="button_get_dokuen">Get Dokuen Japanese Reader (Play Store)</string>
-    <string name="content_description_installed">Installed</string>
 
     <string name="error_load_failed_title">Load Failed</string>
     <string name="error_load_failed_message">Failed to retrieve imported dictionaries.</string>
@@ -132,6 +197,17 @@
     <string name="no_kanji_dictionary_body">To look up kanji entries, install a kanji dictionary (such as KANJIDIC) and make sure it’s enabled in the Yomitan settings.</string>
     <string name="deinflected_badge">"  Deinflected  "</string>
     <string name="error_init_failed">Failed to initialize Yomitan: %1$s</string>
+    <string name="anki_add_link_label">Add: %1$s</string>
+    <string name="anki_added_link_label">Added: %1$s</string>
+    <string name="anki_overwritten_link_label">Overwritten: %1$s</string>
+    <string name="error_anki_stale_link">This Anki link has expired. Please look up the word again.</string>
+    <string name="error_ankidroid_not_installed">AnkiDroid is not installed.</string>
+    <string name="error_ankidroid_no_permission">AnkiDroid permission was not granted.</string>
+    <string name="error_anki_update_failed">Failed to update the existing Anki note.</string>
+    <string name="error_anki_add_failed">Failed to add the Anki note.</string>
+    <string name="error_anki_deck_missing">Card format \"%1$s\" adds notes to the deck \"%2$s\", which no longer exists in AnkiDroid. Choose its deck again in the Anki Export settings.</string>
+    <string name="error_anki_note_type_missing">Card format \"%1$s\" uses the note type \"%2$s\", which no longer exists in AnkiDroid. Choose its note type again in the Anki Export settings.</string>
+    <string name="error_anki_unexpected">AnkiDroid could not complete the request. Check that AnkiDroid is running and that %1$s still has permission to access it.</string>
 
     <!-- Importer specifics -->
     <string name="error_dictionary_already_imported">Dictionary %1$s is already imported, skipped it.</string>

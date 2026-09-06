@@ -948,4 +948,237 @@ class YomitanDictionaryPluginServiceTest {
             assertOneKanjiEntryPerDictionaryInPriorityOrder(result.entries)
         }
     }
+
+    @Test
+    fun testTermEntryGetsAnkiActionLinkWhenCardFormatConfigured() {
+        runBlocking {
+            val settings = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings(
+                enabled = true,
+                cardFormats = listOf(
+                    io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+                        name = "Vocab",
+                        type = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.TERM,
+                        deckId = 1L,
+                        deckName = "Default",
+                        modelId = 2L,
+                        modelName = "Basic",
+                        fields = emptyMap()
+                    )
+                )
+            )
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.save(app, settings)
+
+            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
+            service.onInitialize(config)
+
+            val queryUrl = "?query=%E6%B9%AF&wildcards=off&primary_reading=%E3%82%86"
+            val result = service.onLookup(queryUrl, 0, queryUrl.length)
+
+            assertEquals(1, result.entries.size)
+            val entry = result.entries[0]
+            assertTrue(entry.body.text.contains("Add: Vocab"))
+            val linkSpan =
+                entry.body.styledSpans?.firstOrNull { it.style.linkUrl?.startsWith("action:anki_add?") == true }
+            assertNotNull(linkSpan)
+        }
+    }
+
+    /**
+     * The {frequencies} marker must include frequency data from every active dictionary, not
+     * only the term's own. Frequency dictionaries in this port are standalone (no term_bank of
+     * their own), so their term_meta rows live under a different dictionary title than the
+     * term: this is the usual "term dictionary + separate frequency dictionary" setup.
+     *
+     * The note data is obtained with ankiNoteDataForLink, which builds it from the lookup the
+     * action link was rendered in, exactly as onExecuteCustomAction does, without needing an
+     * AnkiDroid client.
+     */
+    @Test
+    fun testFrequencyMarkerAcrossActiveDictionaries() {
+        runBlocking {
+            val freqDictTitle = "Freq Dict"
+
+            withContext(Dispatchers.IO) {
+                db.dictionaryDao().insertDictionary(
+                    DictionaryEntity(
+                        title = freqDictTitle, revision = "1.0", sequenced = false, version = 3,
+                        importDate = System.currentTimeMillis(), prefixWildcardsSupported = false,
+                        styles = "", counts = null, importSuccess = true
+                    )
+                )
+                // The frequency dictionary has no term_bank entries of its own - only
+                // term_meta rows for terms that live in other (term) dictionaries.
+                db.termMetaDao().bulkAdd(
+                    listOf(
+                        TermMetaEntity(dictionary = freqDictTitle, expression = "湯", mode = "freq", data = "42")
+                    )
+                )
+            }
+
+            val prefs = app.getSharedPreferences("yomitan_prefs", Application.MODE_PRIVATE)
+            prefs.edit()
+                .putString("installed_dictionaries", "$dictTitle,$freqDictTitle")
+                .putString("active_dictionaries", "$dictTitle,$freqDictTitle")
+                .commit()
+
+            val settings = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings(
+                enabled = true,
+                cardFormats = listOf(
+                    io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+                        name = "Vocab",
+                        type = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.TERM,
+                        deckId = 1L,
+                        deckName = "Default",
+                        modelId = 2L,
+                        modelName = "Basic",
+                        fields = mapOf(
+                            "Front" to io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField(
+                                value = "{frequencies}"
+                            )
+                        )
+                    )
+                )
+            )
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.save(app, settings)
+
+            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
+            service.onInitialize(config)
+
+            val queryUrl = "?query=%E6%B9%AF&wildcards=off&primary_reading=%E3%82%86"
+            val result = service.onLookup(queryUrl, 0, queryUrl.length)
+
+            assertEquals(1, result.entries.size)
+            val entry = result.entries[0]
+            assertTrue(
+                "Entry should still render normally with the Add action link",
+                entry.body.text.contains("Add: Vocab")
+            )
+            val linkSpan =
+                entry.body.styledSpans?.firstOrNull { it.style.linkUrl?.startsWith("action:anki_add?") == true }
+            assertNotNull(linkSpan)
+            val payload = linkSpan!!.style.linkUrl!!.removePrefix("action:")
+            assertTrue("Action link should carry a cache token", payload.contains("token="))
+
+            // Recover the exact AnkiNoteData that onExecuteCustomAction would render fields
+            // from, via the lookup cached when the link was rendered.
+            val noteData = service.ankiNoteDataForLink(payload)
+            assertNotNull("Cached note data should exist for the action link's token", noteData)
+
+            assertTrue(
+                "AnkiNoteData.frequencies should contain the standalone frequency " +
+                        "dictionary's entry even though it is not primaryTerm.dictionary",
+                noteData!!.frequencies.any { it.dictionaryAlias == freqDictTitle }
+            )
+
+            val rendered = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiTemplateEngine
+                .renderField("{frequencies}", noteData)
+            assertTrue(
+                "Rendering the {frequencies} marker should no longer be empty now that the " +
+                        "lookup spans active dictionaries instead of only the term's own dictionary",
+                rendered.text.isNotBlank()
+            )
+        }
+    }
+
+    @Test
+    fun testKanjiEntryGetsAnkiActionLinkWhenCardFormatConfigured() {
+        runBlocking {
+            withContext(Dispatchers.IO) {
+                db.dictionaryDao().insertDictionary(
+                    DictionaryEntity(
+                        title = "Kanji Dict", revision = "1.0", sequenced = false, version = 3,
+                        importDate = System.currentTimeMillis(), prefixWildcardsSupported = false,
+                        styles = "", counts = null, importSuccess = true
+                    )
+                )
+                db.kanjiDao().bulkAdd(
+                    listOf(
+                        KanjiEntity(
+                            dictionary = "Kanji Dict", character = "水", onyomi = "スイ", kunyomi = "みず",
+                            tags = "", meanings = "[\"water\"]", stats = null
+                        )
+                    )
+                )
+            }
+            val prefs = app.getSharedPreferences("yomitan_prefs", Application.MODE_PRIVATE)
+            prefs.edit()
+                .putString("installed_dictionaries", "$dictTitle,Kanji Dict")
+                .putString("active_dictionaries", "$dictTitle,Kanji Dict")
+                .commit()
+
+            val settings = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings(
+                enabled = true,
+                cardFormats = listOf(
+                    io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+                        name = "Kanji",
+                        type = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.KANJI,
+                        deckId = 1L, deckName = "Default", modelId = 2L, modelName = "Basic", fields = emptyMap()
+                    )
+                )
+            )
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.save(app, settings)
+
+            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
+            service.onInitialize(config)
+
+            val queryUrl = "?kanji=%E6%B0%B4"
+            val result = service.onLookup(queryUrl, 0, queryUrl.length)
+
+            assertEquals(1, result.entries.size)
+            assertTrue(result.entries[0].body.text.contains("Add: Kanji"))
+        }
+    }
+
+    @Test
+    fun testExecuteCustomActionThrowsWhenAnkiDroidNotInstalled() {
+        runBlocking {
+            val settings = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings(
+                enabled = true,
+                cardFormats = listOf(
+                    io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+                        name = "Vocab",
+                        type = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.TERM,
+                        deckId = 1L, deckName = "Default", modelId = 2L, modelName = "Basic", fields = emptyMap()
+                    )
+                )
+            )
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.save(app, settings)
+
+            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
+            service.onInitialize(config)
+
+            val queryUrl = "?query=%E6%B9%AF&wildcards=off&primary_reading=%E3%82%86"
+            val result = service.onLookup(queryUrl, 0, queryUrl.length)
+            val linkSpan =
+                result.entries[0].body.styledSpans!!.first { it.style.linkUrl?.startsWith("action:anki_add?") == true }
+            val payload = linkSpan.style.linkUrl!!.removePrefix("action:")
+
+            try {
+                service.onExecuteCustomAction(payload)
+                fail("Expected DictionaryException")
+            } catch (e: DictionaryException) {
+                assertTrue(e.message?.contains("AnkiDroid") == true)
+            }
+        }
+    }
+
+    @Test
+    fun testExecuteCustomActionThrowsOnStaleToken() {
+        runBlocking {
+            val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+            val config = Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") }
+            service.onInitialize(config)
+
+            try {
+                service.onExecuteCustomAction("anki_add?token=nonexistent&format=0")
+                fail("Expected DictionaryException")
+            } catch (e: DictionaryException) {
+                assertTrue(e.message?.contains("expired") == true)
+            }
+        }
+    }
 }

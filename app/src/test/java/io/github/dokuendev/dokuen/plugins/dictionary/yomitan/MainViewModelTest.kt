@@ -477,4 +477,244 @@ class MainViewModelTest {
 
         assertEquals("ascending", uiState.sortFrequencyDictionaryOrder)
     }
+
+    @Test
+    fun testSetAnkiEnabledPersistsAndUpdatesState() {
+        val viewModel = MainViewModel(app)
+
+        viewModel.setAnkiEnabled(true)
+
+        assertEquals(true, viewModel.uiState.value.ankiSettings.enabled)
+        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        assertEquals(true, reloaded.enabled)
+    }
+
+    /**
+     * A view model whose stored Anki settings have no card formats, for tests of the format
+     * list itself (a fresh install starts with the original's three default formats).
+     */
+    private fun viewModelWithNoCardFormats(): MainViewModel {
+        io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.save(
+            app,
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings()
+        )
+        return MainViewModel(app)
+    }
+
+    @Test
+    fun testFreshInstallStartsWithTheOriginalsDefaultCardFormats() {
+        val viewModel = MainViewModel(app)
+
+        assertEquals(
+            listOf("Expression", "Reading", "Kanji"),
+            viewModel.uiState.value.ankiSettings.cardFormats.map { it.name }
+        )
+        // A new format is numbered after the existing ones, as in the original.
+        viewModel.addDefaultAnkiCardFormat()
+        assertEquals("Format 4", viewModel.uiState.value.ankiSettings.cardFormats.last().name)
+    }
+
+    @Test
+    fun testUpdateAnkiCardFormatTransformAppliesToTheStoredFormat() {
+        val viewModel = viewModelWithNoCardFormats()
+        viewModel.addAnkiCardFormat(ankiFormat("Vocab", modelId = 7L))
+        // A concurrent change (such as a field fetch) lands after the editor last read the format...
+        viewModel.applyFetchedAnkiFields(0, 7L, listOf("Front"))
+
+        // ...and a later edit expressed as a transform keeps it.
+        viewModel.updateAnkiCardFormat(0) { it.copy(name = "Renamed") }
+
+        val format = viewModel.uiState.value.ankiSettings.cardFormats[0]
+        assertEquals("Renamed", format.name)
+        assertEquals(listOf("Front"), format.fields.keys.toList())
+    }
+
+    @Test
+    fun testAddAndRemoveAnkiCardFormat() {
+        val viewModel = viewModelWithNoCardFormats()
+        val format = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+            name = "Vocab",
+            type = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.TERM,
+            deckId = 1L,
+            deckName = "Default",
+            modelId = 2L,
+            modelName = "Basic",
+            fields = emptyMap()
+        )
+
+        viewModel.addAnkiCardFormat(format)
+        assertEquals(1, viewModel.uiState.value.ankiSettings.cardFormats.size)
+
+        viewModel.removeAnkiCardFormat(0)
+        assertEquals(0, viewModel.uiState.value.ankiSettings.cardFormats.size)
+    }
+
+    @Test
+    fun testSetAnkiDuplicateScopeCheckAllModelsPersistsAndUpdatesState() {
+        val viewModel = MainViewModel(app)
+
+        viewModel.setAnkiDuplicateScopeCheckAllModels(true)
+
+        assertEquals(true, viewModel.uiState.value.ankiSettings.duplicateScopeCheckAllModels)
+        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        assertEquals(true, reloaded.duplicateScopeCheckAllModels)
+    }
+
+    @Test
+    fun testAddDefaultAnkiCardFormatAddsUpToFiveThenRejects() {
+        val viewModel = viewModelWithNoCardFormats()
+
+        repeat(5) {
+            assertEquals(true, viewModel.addDefaultAnkiCardFormat())
+        }
+        assertEquals(5, viewModel.uiState.value.ankiSettings.cardFormats.size)
+
+        assertEquals(false, viewModel.addDefaultAnkiCardFormat())
+        assertEquals(5, viewModel.uiState.value.ankiSettings.cardFormats.size)
+    }
+
+    @Test
+    fun testAddDefaultAnkiCardFormatUsesIncrementingDefaultNames() {
+        val viewModel = viewModelWithNoCardFormats()
+
+        viewModel.addDefaultAnkiCardFormat()
+        viewModel.addDefaultAnkiCardFormat()
+
+        val names = viewModel.uiState.value.ankiSettings.cardFormats.map { it.name }
+        assertEquals(listOf("Format 1", "Format 2"), names)
+    }
+
+    @Test
+    fun testUpdateAnkiCardFormatReplacesAtIndexAndIgnoresOutOfBoundsIndex() {
+        val viewModel = viewModelWithNoCardFormats()
+        val original = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+            name = "Vocab",
+            type = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.TERM,
+            deckId = 1L,
+            deckName = "Default",
+            modelId = 2L,
+            modelName = "Basic",
+            fields = emptyMap()
+        )
+        viewModel.addAnkiCardFormat(original)
+
+        viewModel.updateAnkiCardFormat(0) { it.copy(name = "Vocab (renamed)") }
+        assertEquals(listOf("Vocab (renamed)"), viewModel.uiState.value.ankiSettings.cardFormats.map { it.name })
+        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        assertEquals(listOf("Vocab (renamed)"), reloaded.cardFormats.map { it.name })
+
+        // Out-of-bounds index must be a no-op, not a crash or a silent list-growing append.
+        viewModel.updateAnkiCardFormat(5) { it.copy(name = "Should Not Apply") }
+        assertEquals(listOf("Vocab (renamed)"), viewModel.uiState.value.ankiSettings.cardFormats.map { it.name })
+    }
+
+    private fun ankiFormat(
+        name: String,
+        modelId: Long,
+        fields: Map<String, io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField> = emptyMap(),
+        type: io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType =
+            io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType.TERM
+    ) = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat(
+        name = name,
+        type = type,
+        deckId = 1L,
+        deckName = "Default",
+        modelId = modelId,
+        modelName = "Model $modelId",
+        fields = fields
+    )
+
+    @Test
+    fun testApplyFetchedAnkiFieldsUsesLatestFormatStateNotStaleSnapshot() {
+        val viewModel = viewModelWithNoCardFormats()
+        viewModel.addAnkiCardFormat(ankiFormat("Vocab", modelId = 7L))
+        // An edit made while the field fetch is in flight...
+        viewModel.updateAnkiCardFormat(0) { it.copy(name = "Vocab renamed") }
+
+        viewModel.applyFetchedAnkiFields(0, 7L, listOf("Front", "Reading", "Meaning"))
+
+        val format = viewModel.uiState.value.ankiSettings.cardFormats[0]
+        assertEquals("Vocab renamed", format.name)
+        assertEquals(listOf("Front", "Reading", "Meaning"), format.fields.keys.toList())
+        assertEquals("{expression}", format.fields["Front"]?.value)
+        assertEquals("{reading}", format.fields["Reading"]?.value)
+        assertEquals("{glossary}", format.fields["Meaning"]?.value)
+    }
+
+    @Test
+    fun testApplyFetchedAnkiFieldsIgnoresFormatWhoseModelChangedOrShifted() {
+        val viewModel = viewModelWithNoCardFormats()
+        viewModel.addAnkiCardFormat(ankiFormat("A", modelId = 7L))
+        viewModel.addAnkiCardFormat(ankiFormat("B", modelId = 8L))
+        // Format A is deleted while its fetch is in flight; B shifts into index 0.
+        viewModel.removeAnkiCardFormat(0)
+
+        viewModel.applyFetchedAnkiFields(0, 7L, listOf("Front"))
+
+        val remaining = viewModel.uiState.value.ankiSettings.cardFormats
+        assertEquals(listOf("B"), remaining.map { it.name })
+        assertEquals(emptyMap<String, Any>(), remaining[0].fields)
+    }
+
+    @Test
+    fun testApplyFetchedAnkiFieldsKeepsExistingFieldsAndDropsRemovedOnes() {
+        val viewModel = viewModelWithNoCardFormats()
+        val existing = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField(
+            value = "{furigana}",
+            overwriteMode = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode.APPEND
+        )
+        viewModel.addAnkiCardFormat(
+            ankiFormat(
+                "Vocab",
+                modelId = 7L,
+                fields = mapOf(
+                    "Reading" to existing,
+                    "Old" to io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField("{tags}")
+                )
+            )
+        )
+
+        viewModel.applyFetchedAnkiFields(0, 7L, listOf("Front", "Reading"))
+
+        val fields = viewModel.uiState.value.ankiSettings.cardFormats[0].fields
+        assertEquals(listOf("Front", "Reading"), fields.keys.toList())
+        assertEquals(existing, fields["Reading"])
+        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        assertEquals(fields, reloaded.cardFormats[0].fields)
+    }
+
+    @Test
+    fun testSyncAnkiCardFormatFieldsSurvivesAnkiDroidException() {
+        val viewModel = MainViewModel(app)
+        viewModel.addAnkiCardFormat(ankiFormat("Vocab", modelId = 7L))
+        val client =
+            org.mockito.kotlin.mock<io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient>()
+        org.mockito.kotlin.whenever(client.getFieldList(7L)).thenThrow(SecurityException("revoked"))
+        viewModel.ankiDroidClient = client
+
+        val done = java.util.concurrent.CountDownLatch(1)
+        viewModel.syncAnkiCardFormatFields(0, 7L) { done.countDown() }
+
+        assertEquals(true, done.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals(emptyMap<String, Any>(), viewModel.uiState.value.ankiSettings.cardFormats[0].fields)
+    }
+
+    @Test
+    fun testRefreshAnkiDeckAndModelOptionsSurvivesAnkiDroidException() {
+        val viewModel = MainViewModel(app)
+        val client =
+            org.mockito.kotlin.mock<io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient>()
+        org.mockito.kotlin.whenever(client.getDeckList()).thenThrow(IllegalStateException("provider crashed"))
+        org.mockito.kotlin.whenever(client.getModelList()).thenReturn(mapOf(1L to "Basic"))
+        viewModel.ankiDroidClient = client
+
+        viewModel.refreshAnkiDeckAndModelOptions()
+
+        val deadline = System.currentTimeMillis() + 5000
+        while (viewModel.uiState.value.ankiModelOptions.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+        }
+        assertEquals(emptyMap<Long, String>(), viewModel.uiState.value.ankiDeckOptions)
+        assertEquals(mapOf(1L to "Basic"), viewModel.uiState.value.ankiModelOptions)
+    }
 }
