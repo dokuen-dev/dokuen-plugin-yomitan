@@ -38,7 +38,7 @@ class JapaneseDeinflectorTest {
      * Runs the original Yomitan's own deinflection test cases (test/language/japanese-transforms.test.js) the
      * way its harness (test/fixtures/language-transformer-test.js, hasTermReasons) does: a case with
      * `valid: true` passes only if some result has the expected term, a word class matching the case's `rule`
-     * (when it gives one) and exactly the expected chain of transforms, innermost first (when it gives one);
+     * (when it gives one), and exactly the expected chain of transforms, innermost first (when it gives one);
      * a case with `valid: false` passes only if no such result exists.
      */
     @Test

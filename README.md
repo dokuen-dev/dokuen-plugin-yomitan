@@ -52,7 +52,7 @@ overlay, while this plugin supplies the dictionary lookups, deinflection, and de
   card formats. Pick any deck and note type, map fields with the same `{expression}`, `{reading}`,
   `{glossary}`, `{tags}`, `{frequencies}`, `{sentence}`/`{cloze-*}`, and other markers used by the
   original Yomitan extension, with duplicate detection and per-field overwrite behavior.
-* **Modern Compose UI:** A clean dark-mode theme management screen that allows users to:
+* **Modern Compose UI:** A clean, dark-themed management screen that allows users to:
     * Install high-quality presets (Jitendex, JMnedict, KANJIDIC, BCCWJ, JPDBv2, Jiten).
     * Import local ZIPs from device storage.
     * Download dictionaries directly via custom URLs.
@@ -101,7 +101,7 @@ When Dokuen queries a word, the service receives
 
 - Substring slicing (up to 12 characters from the cursor position).
 - Running the `JapaneseDeinflector` to generate base form candidates.
-- Database query for matched terms or kanji characters.
+- Querying the database for matched terms or kanji characters.
 - Formatting the output as a `DictionaryResult` composed of `DictionaryEntry` objects.
 
 ### Database Schema
@@ -176,7 +176,7 @@ Generate debug render output from test fixture files:
 ./gradlew generateDebugEntries
 ```
 
-This reads raw Yomitan entry JSON from `app/src/test/resources/testcases/` (using a mocked database
+This reads raw Yomitan entry JSON files from `app/src/test/resources/testcases/` (using a mocked database
 rather than a real one), runs them through the renderer, and writes the results to
 `debug_entry.json` and `debug_kanji_entry.json` at the project root. This is useful for iterating on
 the renderer without needing a full dictionary import.

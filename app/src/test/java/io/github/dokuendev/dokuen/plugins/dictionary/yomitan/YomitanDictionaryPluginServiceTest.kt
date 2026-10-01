@@ -257,7 +257,7 @@ class YomitanDictionaryPluginServiceTest {
                 )
             }
 
-            // Look up "湯" where no term exists for that exact character (Wait, in setUp() "湯" term exists. Let's look up a different character, e.g. "木")
+            // Add a kanji entry for "木", which, unlike "湯" (see setUp()), has no term entry
             withContext(Dispatchers.IO) {
                 db.kanjiDao().bulkAdd(
                     listOf(

@@ -28,7 +28,7 @@ object AnkiFieldDefaults {
      * Returns the value a field named [fieldName] at position [index] should start with. An
      * existing same-named entry in [oldFields] keeps its value; otherwise the first field gets
      * `{expression}`/`{character}` and later fields get the first standard marker whose name
-     * (or alias) matches the field name, ignoring case and treating `-`, `_` and spaces alike.
+     * (or alias) matches the field name, ignoring case and treating `-`, `_`, and spaces alike.
      */
     fun defaultValue(
         fieldName: String,

@@ -14,7 +14,7 @@ data class AnkiScopedStyles(val glossaryScoped: String = "", val dictionaryScope
  * Port of the original's CSS scoping for Anki glossary fields (sanitizeCSS followed by
  * addScopeToCssLegacy, ext/js/core/utilities.js): each top-level style rule's selectors are
  * prefixed with the scope, rules nested inside a style rule (CSS nesting) stay inside it
- * unchanged, and every other top-level rule (`@media`, `@font-face`, `@import` and so on) is
+ * unchanged, and every other top-level rule (`@media`, `@font-face`, `@import`, and so on) is
  * dropped. Rules are written one per line as `selector { name: value; ... }`.
  *
  * The original parses and re-serializes the CSS with the browser's own CSS engine. This port
@@ -185,7 +185,7 @@ object AnkiDictionaryStyles {
     }
 
     /**
-     * Collapses whitespace and puts single spaces around the top-level combinators `>`, `+`
+     * Collapses whitespace and puts single spaces around the top-level combinators `>`, `+`,
      * and `~`, the way a browser writes selector text. Attribute selectors and parenthesized
      * arguments (such as `:nth-child(2n+1)`) are left as written.
      */
@@ -262,7 +262,7 @@ object AnkiDictionaryStyles {
 
     /**
      * Index of the first character of [stops] at or after [from] that is outside strings,
-     * escapes, parentheses and brackets, or `text.length` if there is none.
+     * escapes, parentheses, and brackets, or `text.length` if there is none.
      */
     private fun findTopLevel(text: String, from: Int, stops: String): Int {
         var depth = 0

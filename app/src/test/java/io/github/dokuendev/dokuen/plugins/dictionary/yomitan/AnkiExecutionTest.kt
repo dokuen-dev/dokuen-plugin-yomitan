@@ -49,8 +49,8 @@ import java.net.URLEncoder
 
 /**
  * Behavior of the tap path (onLookup -> action link -> onExecuteCustomAction) against a
- * mocked AnkiDroidClient: duplicate handling, template validation, settings snapshots and
- * the token cache.
+ * mocked AnkiDroidClient: duplicate handling, template validation, settings snapshots,
+ * and the token cache.
  */
 @RunWith(RobolectricTestRunner::class)
 class AnkiExecutionTest {

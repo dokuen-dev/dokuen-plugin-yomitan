@@ -10,7 +10,7 @@ import java.security.MessageDigest
  * `AddContentApi.findDuplicateNotes` computes it the same way.
  */
 object AnkiFieldChecksum {
-    /** An img, audio, video or object tag, with the file name of its src or data attribute. */
+    /** An img, audio, video, or object tag, with the file name of its src or data attribute. */
     private val mediaTag = Regex(
         "<\\b(?:img|audio|video|object)\\b(?:[^>\"']|\"[^\"]*?\"|'[^']*?')*?\\b(?:src|data)\\b=" +
                 "(?:\"([^\"]+?)\"[^>]*>|'([^']+?)'[^>]*>|([^ >]+)[^>]*>)",
@@ -33,7 +33,7 @@ object AnkiFieldChecksum {
 
     /**
      * The field's text as Anki compares it: each media tag replaced by its file name, other tags,
-     * comments, styles and scripts removed, and character references decoded, with a non-breaking
+     * comments, styles, and scripts removed, and character references decoded, with a non-breaking
      * space read as a space.
      */
     fun stripHtmlPreservingMediaFilenames(field: String): String {

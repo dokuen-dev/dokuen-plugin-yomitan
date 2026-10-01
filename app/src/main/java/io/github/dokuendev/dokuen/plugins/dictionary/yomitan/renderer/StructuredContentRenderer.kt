@@ -1273,7 +1273,7 @@ class StructuredContentRenderer(
      * Render a ruby annotation element.
      *
      * Ruby elements contain base text with rt (ruby text) child elements for pronunciation.
-     * This method extracts the base text and ruby text, creates RubySpan objects to map
+     * This method extracts the base text and ruby text and creates RubySpan objects to map
      * character indices to pronunciation annotations.
      *
      * Ruby structure in JSON:

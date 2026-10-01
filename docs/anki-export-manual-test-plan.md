@@ -2,7 +2,7 @@
 
 A device-level parity procedure for the plugin's Anki export, run side by side against desktop
 Yomitan. It is written so that two different testers produce identical results, not merely similar
-ones: every deck, note type, card format, dictionary revision and lookup word is fixed in advance.
+ones: every deck, note type, card format, dictionary revision, and lookup word is fixed in advance.
 
 The document has two parts:
 
@@ -54,7 +54,7 @@ add-on, Python 3, `adb`, a checkout of this repository with what its README list
 and a browser with Yomitan (scanning with **Shift**, its default) and the five dictionaries of R3
 imported; on Android, AnkiDroid (from the Play Store, first-run
 setup done), the host app (`dokuen-android`), and this plugin with the five dictionaries of R3
-imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled and no sort dictionary
+imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled, and no sort dictionary
 chosen.
 
 - [ ] **1.1** Desktop: start Anki.
@@ -95,8 +95,8 @@ Setup reset the plugin's Anki settings to the defaults.
 
 ## Phase 4: Desktop Yomitan settings (desktop)
 
-- [ ] **4.1** In Yomitan's settings, **Backup** → **Import settings**, and import `yomitan-settings-anki-test-plan.json` from the folder setup wrote (`anki-test-plan-reports/<date-time>-setup/`). This sets desktop's dictionaries, frequency sorting, duplicate settings and the 5 card formats (R2).
-- [ ] **4.2** In the **Anki** section, open **Configure Anki flashcards…**. Confirm it lists `AuditVocab`, `AuditKanjiFmt`, `AuditSub`, `AuditQuoteKey` and `AuditBadMarker`, in that order.
+- [ ] **4.1** In Yomitan's settings, **Backup** → **Import settings**, and import `yomitan-settings-anki-test-plan.json` from the folder setup wrote (`anki-test-plan-reports/<date-time>-setup/`). This sets desktop's dictionaries, frequency sorting, duplicate settings, and the 5 card formats (R2).
+- [ ] **4.2** In the **Anki** section, open **Configure Anki flashcards…**. Confirm it lists `AuditVocab`, `AuditKanjiFmt`, `AuditSub`, `AuditQuoteKey`, and `AuditBadMarker`, in that order.
 
 ## Phase 5: Plugin card formats (Android)
 
@@ -121,8 +121,8 @@ difference.
 - [ ] **6.3** **Card tags**: a text field on both. Confirm both label it **Card tags**. Its value is not compared: the default tag differs on purpose (R7).
 - [ ] **6.4** **Check for card duplicates**: a toggle on both. Confirm both label it **Check for card duplicates**.
 - [ ] **6.5** **Check for duplicates across all models**: a toggle on both, shown while **Check for card duplicates** is on. Confirm both label it **Check for duplicates across all models**.
-- [ ] **6.6** **Duplicate card scope**: confirm both offer **Collection**, **Deck** and **Deck root**, worded the same.
-- [ ] **6.7** **When a duplicate is detected**: confirm both offer **Prevent adding**, **Allow overwriting** and **Allow adding**, worded the same.
+- [ ] **6.6** **Duplicate card scope**: confirm both offer **Collection**, **Deck**, and **Deck root**, worded the same.
+- [ ] **6.7** **When a duplicate is detected**: confirm both offer **Prevent adding**, **Allow overwriting**, and **Allow adding**, worded the same.
 - [ ] **6.8** **Screenshot format and quality**: on desktop, under advanced settings. Confirm the plugin has no equivalent.
 - [ ] **6.9** **Idle download timeout**: on desktop, under advanced settings. Confirm the plugin has no equivalent.
 - [ ] **6.10** **Suspend new cards**: on desktop, under advanced settings. Confirm the plugin has no equivalent.
@@ -224,7 +224,7 @@ top of Part 1), so each tap after a setting change is on a new scan, whose links
 - [ ] **9.14** AnkiDroid: delete Seed-Sub, then create Seed-Deck again as in 9.6.
 - [ ] **9.15** Plugin, scope **Deck root**: scan `鉛筆` and tap **Add: AuditSub** (whose deck is `AuditTest::Sub`). Confirm "already exists" (the search covers the root deck `AuditTest`, which holds Seed-Deck).
 - [ ] **9.16** Set scope **Deck**. Scan `鉛筆` again and tap **Add: AuditSub**. Confirm it is **not** a duplicate and a note is added to `AuditTest::Sub` (Seed-Deck is outside `AuditTest::Sub`).
-- [ ] **9.17** AnkiDroid: delete every `鉛筆` note. Open **Add**: type `AuditKanji` (a different note type), deck `AuditTest`, Character `鉛筆`, Kunyomi, Onyomi and Glossary `n/a`, every other field empty. Save.
+- [ ] **9.17** AnkiDroid: delete every `鉛筆` note. Open **Add**: type `AuditKanji` (a different note type), deck `AuditTest`, Character `鉛筆`, Kunyomi, Onyomi, and Glossary `n/a`, every other field empty. Save.
 - [ ] **9.18** Plugin: set scope **Collection**, across all models off. Scan `鉛筆` and tap **Add: AuditVocab**. Confirm it is **not** a duplicate (a different note type, not checked) and a note is added.
 - [ ] **9.19** AnkiDroid: delete the note just added. Plugin: turn across all models **on**. Scan `鉛筆` and tap **Add: AuditVocab**. Confirm "already exists": across all models compares each note's first field, whatever its name, so the `AuditKanji` note, whose first field `Character` is `鉛筆`, is a duplicate.
 - [ ] **9.20** Plugin: turn across all models off and set **Allow adding**. Scan `手紙` and tap **Add: AuditQuoteKey** on 手紙【てがみ】 (its Expression becomes `手紙"`). Confirm it succeeds.
@@ -244,13 +244,13 @@ duplicate exists and another note would be added), gray (a duplicate exists and 
 prevented).
 
 - [ ] **11.1** On both, set "When a duplicate is detected" to **Allow overwriting** (on the plugin, with Dokuen's overlay hidden).
-- [ ] **11.2** Desktop: scan `猫`, and then `犬` and, in its popup, click `犬` in the 犬【いぬ】 entry's headword (words no step adds, so no duplicate exists). Confirm the **AuditVocab**, **AuditSub**, **AuditQuoteKey** and **AuditBadMarker** buttons (on 猫【ねこ】) and the **AuditKanjiFmt** button (on the 犬 kanji entry) are all the same green, told apart only by shape.
+- [ ] **11.2** Desktop: scan `猫`, and then `犬` and, in its popup, click `犬` in the 犬【いぬ】 entry's headword (words no step adds, so no duplicate exists). Confirm the **AuditVocab**, **AuditSub**, **AuditQuoteKey**, and **AuditBadMarker** buttons (on 猫【ねこ】) and the **AuditKanjiFmt** button (on the 犬 kanji entry) are all the same green, told apart only by shape.
 - [ ] **11.3** Plugin: scan `猫`, and then `犬` and tap `犬` in the 犬【いぬ】 entry's headword. Confirm **AuditVocab** is prefixed ●, **AuditSub** and **AuditBadMarker** ■, **AuditQuoteKey** ◉, and **AuditKanjiFmt** ◆, all in the same green.
-- [ ] **11.4** Desktop: scan `食べる` (notes for it now exist). On 食べる【たべる】, confirm the **AuditVocab**, **AuditSub** and **AuditBadMarker** buttons show their overwrite (orange) variant and **AuditQuoteKey** is green (no note's first field is `食べる"`). Click **AuditQuoteKey**. Confirm its button turns orange too.
-- [ ] **11.5** Plugin: scan `食べる`. Confirm every link on 食べる【たべる】 is green and reads **Add**: the plugin checks for duplicates only once a link of the entry is tapped (R7). Tap **Add: AuditQuoteKey**. Confirm it now reads **Added: AuditQuoteKey**, and that it and the **AuditVocab**, **AuditSub** and **AuditBadMarker** links are orange, as desktop's buttons ended in 11.4.
+- [ ] **11.4** Desktop: scan `食べる` (notes for it now exist). On 食べる【たべる】, confirm the **AuditVocab**, **AuditSub**, and **AuditBadMarker** buttons show their overwrite (orange) variant and **AuditQuoteKey** is green (no note's first field is `食べる"`). Click **AuditQuoteKey**. Confirm its button turns orange too.
+- [ ] **11.5** Plugin: scan `食べる`. Confirm every link on 食べる【たべる】 is green and reads **Add**: the plugin checks for duplicates only once a link of the entry is tapped (R7). Tap **Add: AuditQuoteKey**. Confirm it now reads **Added: AuditQuoteKey**, and that it and the **AuditVocab**, **AuditSub**, and **AuditBadMarker** links are orange, as desktop's buttons ended in 11.4.
 - [ ] **11.6** Tap **Added: AuditQuoteKey**. Confirm it now reads **Overwritten: AuditQuoteKey** and stays orange: like desktop's overwrite button, the second tap overwrote the note the first one added.
 - [ ] **11.7** On both, set "When a duplicate is detected" to **Allow adding** (on the plugin, with Dokuen's overlay hidden). Desktop: scan `食べる`, and confirm the four buttons on 食べる【たべる】 show their add-duplicate (purple) variant. Plugin: scan `食べる` and tap **Add: AuditVocab**. Confirm it reads **Added: AuditVocab**, and that it and the other three links are purple, like desktop's buttons.
-- [ ] **11.8** Plugin: confirm there is no link to view a note in AnkiDroid ("View in Anki", "Edit" or similar) anywhere (R7).
+- [ ] **11.8** Plugin: confirm there is no link to view a note in AnkiDroid ("View in Anki", "Edit", or similar) anywhere (R7).
 
 ## Phase 12: Errors and edge cases (Android, then desktop)
 
@@ -341,7 +341,7 @@ enabled on both platforms in exactly this order (1 is the highest priority):
 | 4 | `JPDBv2㋕` | `JPDB v2.2 Frequency Kana 2024-10-13` | Term frequencies; its `index.json` declares `"frequencyMode": "rank-based"` |
 | 5 | `BCCWJ` | `1` | Term frequencies, the combined short-unit and long-unit build (`BCCWJ_SUW_LUW_combined.zip`, since the revision `1` alone does not identify the build); its `index.json` declares no `frequencyMode` |
 
-Jitendex, JMnedict and KANJIDIC publish new revisions regularly, and entries change between
+Jitendex, JMnedict, and KANJIDIC publish new revisions regularly, and entries change between
 revisions, so do not use Yomitan's update check or re-import any dictionary during a run. No other
 dictionary may be enabled on either platform: another term dictionary adds its definitions to the
 same popup entries and so changes every glossary marker, and another frequency dictionary changes
@@ -373,7 +373,7 @@ words are from Jitendex unless noted.
 
 | Note | Desktop / plugin step | Word (entry) | Why |
 |---|---|---|---|
-| T1 | 7.1 / 8.1 | 食べる【たべる】 | The main marker word (rule `v1`, tag `★`); furigana with one kanji run and a kana tail; nested lists, ruby and external links (C7). |
+| T1 | 7.1 / 8.1 | 食べる【たべる】 | The main marker word (rule `v1`, tag `★`); furigana with one kanji run and a kana tail; nested lists, ruby, and external links (C7). |
 | T2 | 7.2 / 8.2 | 動き出す【うごきだす】 | Furigana with two kanji runs separated by kana (rule `v5`, tags `★` and `priority form`). |
 | T3 | 7.3 / 8.3 | お見舞い【おみまい】 | Furigana with a kana prefix (no tags, no rule); internal `?query=` cross-reference links (C7). |
 | T4 | 7.4 / 8.4 | 食べる【たべる】, scanned as 食べさせられた | `conjugation`: the deconjugation chain. A separate note from T1, not an overwrite of it. |
@@ -387,7 +387,7 @@ words are from Jitendex unless noted.
 | 記号 | 7.12 / 8.12 | 記号【きごう】 | A literal `&` in an example sentence's translation (C7). |
 | 學校 | 7.13 / 8.13 | 學校 (old kanji form of 学校, no separate reading) | A redirect entry, whose second glossary item points at `学校` (C7). Its old form, 學, is a standard Traditional Chinese character, which OCR reads reliably. |
 | K1 | 7.14 / 8.14 | 食 (KANJIDIC), reached from 食べる【たべる】's headword | Kanji markers, and the sentence and query a kanji carries over from the term it was reached from. (A scan of `食` alone shows the term 食【しょく】, not the kanji, on the plugin.) |
-| T8 | 7.15 / 8.15 | 動き出す【うごきだす】, scanned in the test page's paragraph (R5) | `sentence`, the cloze markers and `search-query` (C4). |
+| T8 | 7.15 / 8.15 | 動き出す【うごきだす】, scanned in the test page's paragraph (R5) | `sentence`, the cloze markers, and `search-query` (C4). |
 | K2 | 7.16 / 8.16 | 動 (KANJIDIC), reached from T8's headword | A kanji that carries the term's sentence (C6). |
 | TG | 7.18 / 8.20 | 食べる【たべる】, with card tags set | Card tag parsing (C9). |
 | TB | 7.20 / 8.22 | 食べる【たべる】, via `AuditBadMarker` | An unknown marker (C10). |
@@ -431,7 +431,7 @@ in large text:
    雨が降っていた。電車が動き出す前に座った。窓の外は暗かった。
    ```
 
-3. The words only Phases 9, 11 and 12 scan, in the same way: `椅子。`, `鉛筆。`, `手紙。`, `猫。`,
+3. The words only Phases 9, 11, and 12 scan, in the same way: `椅子。`, `鉛筆。`, `手紙。`, `猫。`,
    `犬。`, `かける。`.
 
 Both platforms cut the text around the match at the nearest sentence terminator (`。`) or line
@@ -507,7 +507,7 @@ exactly:
 |---|---|---|---|
 | Enable Anki integration | Anki section, top toggle | Anki Export tab, Enable switch | Same meaning. The plugin never turns it on without a working AnkiDroid connection, hence the install and permission flow of Phase 3. |
 | AnkiConnect address / API key | advanced | absent | There is no AnkiConnect protocol on Android. |
-| Card tags | "Card tags" text field | "Card tags" text field | Same label, same comma, semicolon and space parsing. Both rewrite the typed text as the tags one space apart when the field loses focus (on the plugin, also on the keyboard's **Done**). |
+| Card tags | "Card tags" text field | "Card tags" text field | Same label, same comma, semicolon, and space parsing. Both rewrite the typed text as the tags one space apart when the field loses focus (on the plugin, also on the keyboard's **Done**). |
 | Check for card duplicates | toggle | same | |
 | Check duplicates across all models | toggle, shown when duplicates on | same | |
 | Duplicate card scope | Collection / Deck / Deck root | same | The plugin runs a real deck-scoped search. |
@@ -516,7 +516,7 @@ exactly:
 | Idle download timeout | advanced | absent | There is no `{audio}` content yet. |
 | Suspend new cards | advanced toggle | absent | AnkiDroid's API has no equivalent. |
 | Note viewer window (Browse/Edit) | select, and a "View added note" button after an add | absent: no link to a note | AnkiDroid has no API for opening its note editor, and on Android 14 and later a plugin cannot open AnkiDroid's card browser either (see `anki-export.md`). |
-| Show card tags and flags | never/always/non-standard/custom + target tags | absent | It would need an AnkiDroid round trip per card format on every lookup; documented in `AnkiSettings.kt`. |
+| Show card tags and flags | never/always/non-standard/custom + target tags | absent | It would need an AnkiDroid round trip per card format on every lookup (documented in `AnkiSettings.kt`). |
 | Force Anki sync on adding card | advanced toggle | absent | AnkiDroid's API has no equivalent. |
 | Configure Anki flashcards… | dialog | tab-strip, always-visible editor | Same content in a layout suited to the device; both save as you edit. |
 | Configure Anki card templates… (raw Handlebars) | advanced dialog | absent | A documented non-goal. |
@@ -536,7 +536,7 @@ says otherwise; the checks also give the exact value wherever it is known in adv
 ### C1. The plugin's stored settings
 
 - **C1.1** The plugin has exactly the 5 card formats of R2, in that order.
-- **C1.2** Each format's type, deck, note type and icon are as in R2.
+- **C1.2** Each format's type, deck, note type, and icon are as in R2.
 - **C1.3** Each format's field values are as in R2.
 - **C1.4** Each format's overwrite modes are as in R2.
 - **C1.5** Export is on, and the duplicate settings are: checking on, scope Collection, across all models off, Allow adding (9.22).
@@ -571,7 +571,7 @@ says otherwise; the checks also give the exact value wherever it is known in adv
 
 ### C3. Furigana
 
-The expected `furigana` of T1, T2 and T3. Both platforms segment each kana/non-kana run of the
+The expected `furigana` of T1, T2, and T3. Both platforms segment each kana/non-kana run of the
 expression independently against the reading, so every word is expected to match between
 platforms.
 
@@ -640,10 +640,10 @@ example `#565656` becomes `rgb(86, 86, 86)`) and normalizes whitespace, and the 
 "The CSS in glossary `<style>` elements is not re-serialized by a browser" in `anki-export.md`).
 
 - **C7.1** The wrapper (`<div>`, `<ol>`, `<li data-dictionary=...>`, `<i>(...)</i>` prefix) matches desktop for every note in the table.
-- **C7.2** T1: the whole definition matches desktop, including every `data-sc-*`, `style`, `lang` and `title` attribute, the ruby, and the external links' `href`s.
+- **C7.2** T1: the whole definition matches desktop, including every `data-sc-*`, `style`, `lang`, and `title` attribute, the ruby, and the external links' `href`s.
 - **C7.3** T3: every internal link's `href` is `#` on both, and the rest of the definition, including the ruby inside the link text, matches.
 - **C7.4** 時雨: `colspan="2"` on the header cell on both, and the rest of the forms table matches.
-- **C7.5** 鳥居: the plugin's image is a bare `<img>` with `alt` (the image's path in the dictionary), `width` and `height` attributes but no `src`. Desktop stores the image in Anki's media folder and writes a link to that file around a stack of spans holding an `<img>` with a `src`. That is the known gap of R9, not a new finding: the rest of the `Glossary` is compared with each image blanked out on both, and both platforms' image markup is recorded.
+- **C7.5** 鳥居: the plugin's image is a bare `<img>` with `alt` (the image's path in the dictionary), `width`, and `height` attributes but no `src`. Desktop stores the image in Anki's media folder and writes a link to that file around a stack of spans holding an `<img>` with a `src`. That is the known gap of R9, not a new finding: the rest of the `Glossary` is compared with each image blanked out on both, and both platforms' image markup is recorded.
 - **C7.6** 千鳥: the same known gap for the inline glyph image.
 - **C7.7** 順路: the translation's `->` appears as `-&gt;` on both, and the rest of the sentence, including its `"` characters, matches.
 - **C7.8** 記号: the translation's `&` appears as `&amp;` on both.
@@ -659,7 +659,7 @@ example `#565656` becomes `rgb(86, 86, 86)`) and normalizes whitespace, and the 
 
 ### C9. Card tags (TG)
 
-- **C9.1** On each platform exactly one note has the tag `jlpt-n3`, and its tags are exactly `jlpt-n3`, `vocab`, `core2k` and `listening`.
+- **C9.1** On each platform exactly one note has the tag `jlpt-n3`, and its tags are exactly `jlpt-n3`, `vocab`, `core2k`, and `listening`.
 
 ### C10. Unknown marker (TB)
 
@@ -675,7 +675,7 @@ and whitespace of the CSS in the glossary's `<style>` elements (C7). Any other d
 
 The pinned dictionaries don't exercise these converter cases, so this plan does not check them:
 
-- Dropping `@media`, `@font-face` and other at-rules from dictionary CSS: Jitendex's `styles.css` has none.
+- Dropping `@media`, `@font-face`, and other at-rules from dictionary CSS: Jitendex's `styles.css` has none.
 - `<details>`/`<summary>` elements: Jitendex does not use them.
 - Turning export off while a result is open, and then tapping one of its links: the plugin's settings cannot be reached while the dictionary window is open. `AnkiExecutionTest` covers it (`turningExportOffAfterRenderingRefusesTheTap`).
 - Wildcard searches: Dokuen has no dictionary search. A large result's links are tested with a kana scan instead (12.2).

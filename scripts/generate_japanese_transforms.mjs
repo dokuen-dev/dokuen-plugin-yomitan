@@ -1,6 +1,6 @@
 // Generates app/src/main/java/.../parser/JapaneseTransforms.kt from the original Yomitan's Japanese
 // deinflection rules (ext/js/language/ja/japanese-transforms.js), so the port's rules, their word-class
-// conditions and their names stay exactly the original's.
+// conditions, and their names stay exactly the original's.
 //
 // Usage, from this repository's root:
 //   node scripts/generate_japanese_transforms.mjs <path to a Yomitan checkout>

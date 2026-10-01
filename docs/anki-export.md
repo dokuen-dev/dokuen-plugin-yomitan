@@ -67,7 +67,7 @@ engine"), so a lookup is recorded when it has action links or such sentences.
 **Why old links must stay valid.** The host keeps a back/forward history of earlier results without
 querying the plugin again, and can run lookups concurrently. Links from older lookups therefore have to
 stay tappable. The host does not tell the plugin when it discards a result, so the cache is bounded by
-count rather than by lifetime: it keeps the 10 most recent lookups that produced links, and is cleared
+count rather than by lifetime: it keeps the 10 most recent lookups that produced links and is cleared
 when the session shuts down. Eviction removes a whole lookup at a time, so every entry of a retained
 lookup stays tappable however many entries it has (a kana scan or a wildcard search can return dozens).
 A link whose lookup has been evicted produces a "stale link" error. So does a link rendered by an
@@ -136,7 +136,7 @@ checked on that tap.
 Each supported marker reproduces the output of the matching partial in the original's default
 field templates (`ext/data/templates/default-anki-field-templates.handlebars`) under its default
 options: the "group" result mode (one note per popup entry, with every definition of the term
-group), non-compact tags and non-compact glossaries. Values the original prints with `{{...}}` are
+group), non-compact tags, and non-compact glossaries. Values the original prints with `{{...}}` are
 HTML-escaped the way Handlebars escapes them.
 
 **Markers with real content** (`AnkiTemplateEngine.supportedMarkers`):
@@ -161,9 +161,9 @@ sentence is that text. Text that sits close together and flows as ordinary runni
 paragraph on a web page, is recognized as a single block.
 
 `{search-query}` is the lookup's query, as in the original's popup (`context.fullQuery`, which falls
-back to the popup's query). For a scan, the scanned text cut to the longest match of any result
+back to the popup's query). For a scan, it is the scanned text cut to the longest match of any result
 (the same for every entry of the lookup, as `text-scanner.js` cuts it). For an internal `?query=`
-link, its query. For a kanji lookup, the character, except for a kanji reached from a term's
+link, it is the link's query. For a kanji lookup, it is the character, except for a kanji reached from a term's
 headword (below), which keeps the term lookup's query when that is longer than the kanji, as the
 original's `_createSearchParams` (`display.js`) carries the full query into the kanji lookup.
 
@@ -241,7 +241,7 @@ holding that CSS, with every rule's selectors prefixed by
 `.yomitan-glossary [data-dictionary="<title>"]` so it only applies to that dictionary's
 definitions. `{glossary-first}` follows its single definition with the same CSS prefixed by
 `.yomitan-glossary` only. As in the original (`addScopeToCssLegacy`), only top-level style rules are
-kept: `@media`, `@font-face` and other at-rules are dropped, and rules nested inside a style rule
+kept: `@media`, `@font-face`, and other at-rules are dropped, and rules nested inside a style rule
 (CSS nesting, which Jitendex uses) stay inside their parent. `{glossary-plain}` and kanji glossaries
 have no `<style>`. The CSS comes from `DictionaryEntity.styles` and is scoped when a link is first
 tapped, by `AnkiDictionaryStyles`.
@@ -269,9 +269,9 @@ Duplicate handling follows the original's model:
   deck below it, as AnkiConnect's `checkChildren` does. The deck ids come from AnkiDroid's live
   deck list, so renaming a deck can't break the check either.
 - `duplicateBehavior`: `PREVENT` blocks the add and reports the note already exists; `OVERWRITE`
-  merges the newly-rendered field values into the existing duplicate note per each field's
+  merges the newly rendered field values into the existing duplicate note per each field's
   `overwriteMode` (`COALESCE`/`COALESCE_NEW`/`OVERWRITE`/`APPEND`/`PREPEND`/`SKIP`, see
-  `AnkiFieldMerger`; append and prepend concatenate with no separator, like the original) then
+  `AnkiFieldMerger`; append and prepend concatenate with no separator, like the original), and then
   updates it. Only a duplicate of the format's own note type is overwritten (fields are merged by
   position, which is meaningless across note types), so when "check across all models" finds only
   notes of other note types, a new note is added instead;
@@ -283,9 +283,9 @@ Reached from the dashboard's "Anki Export" tab (a `HorizontalPager` page alongsi
 an enable switch gated on a real AnkiDroid install/permission flow (never turns on without a
 successful connection), global card tags and duplicate-handling controls, and a tab-strip
 card-format editor with one tab per format (name, type, icon, deck, model, and a field-mapping row
-per real field name fetched live from the chosen model). No Save/Cancel; every control writes to
+per real field name fetched live from the chosen model). There is no Save/Cancel: every control writes to
 settings the instant it changes, matching the original's own live-editing interaction model rather
-than a staged dialog. Capped at 5 formats. The only confirm/cancel dialog anywhere in this UI is
+than a staged dialog. There can be at most 5 formats. The only confirm/cancel dialog anywhere in this UI is
 deleting a card format. The card tags field shows the tags one space apart, and, like the original's
 (`splitTags` and `joinTags` in `generic-setting-controller.js`), rewrites the typed text that way when
 it loses focus, which the keyboard's Done key also causes. While it has focus, the text stays as
@@ -296,7 +296,7 @@ edit never undoes a change that landed in between, such as a field list fetched 
 The defaults are the original's (`options-schema.json`), except the card tag: export off, card tags
 `dokuen-yomitan` (see "Deliberate differences"), duplicate checking on with scope Collection and
 "When a duplicate is detected" set to "Allow adding" (`ALWAYS_ADD`), and three card formats with no
-deck or note type chosen yet: Expression (Term, Big Circle), Reading (Term, Small Circle) and Kanji
+deck or note type chosen yet: Expression (Term, Big Circle), Reading (Term, Small Circle), and Kanji
 (Kanji, Big Circle). A format only gets action links
 once it has both a deck and a note type. A format added with "+" is named `Format <n>`, where n is the
 new format count, as in the original. A format whose name is emptied also shows `Format <n>` on its
@@ -312,7 +312,7 @@ standard marker: the menu does not list it and no field defaults to it, so it ha
 first field is
 flagged if it contains no marker. When "Allow overwriting" is selected, each field row also has an
 overwrite-mode menu, listed in the original's order: Skip, Prepend, Append, Fill if empty, Overwrite
-if available, Overwrite (the declaration order of `AnkiFieldOverwriteMode`). When enabling fails because the AnkiDroid permission was denied,
+if available, and Overwrite (the declaration order of `AnkiFieldOverwriteMode`). When enabling fails because the AnkiDroid permission was denied,
 the switch stays off and a status row with a retry button (or, after a permanent denial, an "Open
 settings" button) stays visible.
 
@@ -350,7 +350,7 @@ same entry, when an AnkiDroid round-trip is expected anyway:
 - The tapped format's own duplicate search (the one the tap runs before writing) decides what the
   tap does. After a successful write, its link shows the state the new note puts it in without
   another query: the written note is a duplicate of the format's own note type, so its color is
-  gray, orange or purple per "When a duplicate is detected", as the original's button turns after
+  gray, orange, or purple per "When a duplicate is detected", as the original's button turns after
   an add. With duplicate checking off, or when the first field renders empty (neither is
   searched), it is purple, since the next tap adds another note.
 - Every other format of the same entry is then searched the way a tap on it would search
@@ -402,7 +402,7 @@ API surface or a deliberate scope boundary:
   thousands of queries, and an unpunctuated OCR block (up to about 400 characters) far more, inside
   the host's blocking custom-action call. The original gets away with it because its dictionary is
   a local in-process store and it caches parses. Options that would make this version cheap enough
-  (a bulk-query scanner with a cap, timeout and cache) would duplicate segmentation work the host
+  (a bulk-query scanner with a cap, timeout, and cache) would duplicate segmentation work the host
   already does. Dokuen already segments text and determines furigana, but does not expose it to
   plugins yet, because a dictionary plugin was not expected to need it. Support will wait for the
   host SDK to provide the readings. The plugin will then build the marker values from what the
@@ -434,7 +434,7 @@ API surface or a deliberate scope boundary:
 - **The CSS in glossary `<style>` elements is not re-serialized by a browser.** The original parses
   and rewrites the dictionary's CSS with the browser's CSS engine, which also normalizes values
   (`#fff` becomes `rgb(255, 255, 255)`) and drops declarations it rejects. `AnkiDictionaryStyles`
-  only removes comments, collapses whitespace and writes each rule as `selector { name: value; }`,
+  only removes comments, collapses whitespace, and writes each rule as `selector { name: value; }`,
   so values keep their original spelling and rejected declarations stay in the text. The browser
   that renders the card ignores those the same way, so cards look the same, but the field text can
   differ from desktop's.
@@ -511,14 +511,14 @@ Unit tests live under `app/src/test/java/.../anki/` (`AnkiSettingsStoreTest`,
 `AnkiExecutionTest.kt` (tapping a link against a mocked `AnkiDroidClient`: every duplicate
 behavior, a deleted deck or note type, the link labels and colors a tap leaves, the link cache,
 settings changing between render and tap, and the sentence and query a scanned term, a tapped
-kanji and a kanji reached through a headword link each get). All pure-logic classes (the template
+kanji, and a kanji reached through a headword link each get). All pure-logic classes (the template
 engine, the glossary converter, the CSS scoping, the tag-text utility) have plain JUnit coverage
 with no Android dependency; everything touching `Context`/SharedPreferences/the service class uses
 Robolectric. All of these run on the JVM.
 
 `app/src/androidTest/.../anki/AnkiDroidDeviceTest.kt` runs against the AnkiDroid installed on a
 device. It checks that AnkiDroid accepts the duplicate check's SQL and that it finds what it
-should (deck, deck-root and note-type scoping, keys with quotes, wildcards, Japanese text and
+should (deck, deck-root, and note-type scoping, keys with quotes, wildcards, Japanese text and
 markup, and that `AnkiFieldChecksum` matches the checksums AnkiDroid stores), and that notes,
 including an installed dictionary's `{glossary}` with its `<style>` element, round-trip unchanged.
 It writes to the device's AnkiDroid collection: it creates the decks `DokuenPluginTest` and

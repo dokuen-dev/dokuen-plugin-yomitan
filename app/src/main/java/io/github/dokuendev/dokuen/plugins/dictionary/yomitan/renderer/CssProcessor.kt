@@ -472,7 +472,7 @@ class CssProcessor {
      *
      * Font-weight values ≥700 are considered bold.
      * Named values "bold" and "bolder" map to true.
-     * Numeric values < 700 and named values "normal", "lighter" map to false.
+     * Numeric values < 700 and named values "normal" and "lighter" map to false.
      *
      * @param fontWeightValue The CSS font-weight value string
      * @return true if bold, false otherwise

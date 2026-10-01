@@ -40,7 +40,7 @@
     - Impossible conjugation chains are no longer accepted.
     - A conjugated form only matches entries whose parts of speech allow it, so conjugated lookups
       no longer match nouns or other unrelated words.
-    - Added rules that were previously missing (the のたまう-type -て/-た forms, -ふ and -やがる).
+    - Added rules that were previously missing (the のたまう-type -て/-た forms, -ふ, and -やがる).
 - Deinflection chains are shown innermost first, joined with "«", as in the original extension, and
   hover descriptions come from the original's rule data.
 

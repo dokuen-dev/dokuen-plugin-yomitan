@@ -2071,7 +2071,7 @@ class StructuredContentRendererTest {
         val styledText = spanGenerator.build()
         assertEquals("日本", styledText.text)
 
-        // Check linkUrl, the full ?-prefixed href is preserved verbatim, including
+        // Check linkUrl: the full ?-prefixed href is preserved verbatim, including
         // wildcards and primary_reading, which lookupInternalLink parses via parseQueryParams.
         assertNotNull(styledText.styledSpans)
         val span = styledText.styledSpans!![0]

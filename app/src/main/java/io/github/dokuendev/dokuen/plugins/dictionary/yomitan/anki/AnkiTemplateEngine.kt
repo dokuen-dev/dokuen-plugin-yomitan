@@ -7,8 +7,8 @@ import kotlin.math.floor
  *
  * Each supported marker reproduces the output of the matching partial in the original
  * Yomitan's default field templates (ext/data/templates/default-anki-field-templates.
- * handlebars) under its default options: "group" result output mode, non-compact tags and
- * non-compact glossaries. Values the original prints with `{{...}}` are HTML-escaped the way
+ * handlebars) under its default options: "group" result output mode, non-compact tags,
+ * and non-compact glossaries. Values the original prints with `{{...}}` are HTML-escaped the way
  * Handlebars escapes them; values it prints raw (`{{{...}}}` or helpers returning safe
  * strings) are left as-is.
  */

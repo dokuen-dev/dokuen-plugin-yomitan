@@ -7,7 +7,7 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki
  * in-progress typing) is independently testable.
  */
 object TagsTextUtil {
-    /** The original's splitTags: tags are separated by any run of commas, semicolons and spaces. */
+    /** The original's splitTags: tags are separated by any run of commas, semicolons, and spaces. */
     fun parseTags(text: String): List<String> =
         text.split(Regex("[,; ]+")).map { it.trim() }.filter { it.isNotEmpty() }
 

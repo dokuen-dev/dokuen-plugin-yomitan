@@ -7,7 +7,7 @@ import org.junit.Test
 /**
  * Expected strings are what the original Yomitan's default field templates
  * (ext/data/templates/default-anki-field-templates.handlebars) produce under default options:
- * "group" result output mode, non-compact tags and non-compact glossaries.
+ * "group" result output mode, non-compact tags, and non-compact glossaries.
  */
 class AnkiTemplateEngineTest {
 

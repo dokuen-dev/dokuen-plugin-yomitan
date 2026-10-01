@@ -113,14 +113,14 @@ textarea{font:inherit;width:100%;border-radius:8px;border:1px solid var(--border
 <script>
 const PLAN = {
 "source":"anki-export-manual-test-plan.md",
-"hash":"e5167df63db8",
+"hash":"16f2adb6b728",
 "preamble":[
 {"t": "p", "x": "Follow the phases in order and do every step exactly as written. Each phase says where it is done."},
 {"t": "p", "x": "Throughout:"},
 {"t": "ul", "x": ["**\"Scan `X`\"** means looking up `X` from the test page that setup serves (R5), where `X` is on a line of its own: on desktop, in the page in the desktop browser, hold **Shift** and move the mouse pointer onto the first character of `X`; on Android, in the page in Chrome, use Dokuen to select exactly `X` (its characters only, not the `。` after it). Every lookup of the plan is a scan: Dokuen has no dictionary search, and scanning the same text gives both platforms the same query and sentence.", "**\"Add `E` via `F`\"** means: in the lookup's results, on the entry `E` (shown as headword【reading】), click the card format `F`'s button (desktop) or tap its **Add: F** link (plugin). The result has other entries too; always use the one named.", "**Changing a plugin setting** (anything in its dashboard) is only possible while Dokuen's overlay, which holds the furigana overlay and the dictionary window, is hidden. When it is shown, first tap Dokuen's floating scan button to hide it; the session keeps running. Make the change, then tap the floating button to scan again. A result shown before the change is gone, so a step that then taps a link says to scan the word again.", "Everything a step does not ask you to confirm is checked by the check script in Phase 10.", "If you add a note by mistake, delete that note right away (desktop: Anki's **Browse**; Android: AnkiDroid's card browser). The check script identifies notes by the order they were added.", "AnkiDroid's card browser only searches the deck selected in it. Whenever a step counts notes in it, first choose **All decks** in its deck menu.", "To see a note's stored field values, use the check script's report rather than AnkiDroid's note editor, which does not show them exactly (see \"Reading a note's fields by hand\" in R6)."]}
 ],
 "phases":[
-{"n":1,"title":"Before you start","note":"Already installed (this plan does not cover installing them): on desktop, Anki with the AnkiConnect add-on, Python 3, `adb`, a checkout of this repository with what its README lists for building it, and a browser with Yomitan (scanning with **Shift**, its default) and the five dictionaries of R3 imported; on Android, AnkiDroid (from the Play Store, first-run setup done), the host app (`dokuen-android`), and this plugin with the five dictionaries of R3 imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled and no sort dictionary chosen.","steps":[
+{"n":1,"title":"Before you start","note":"Already installed (this plan does not cover installing them): on desktop, Anki with the AnkiConnect add-on, Python 3, `adb`, a checkout of this repository with what its README lists for building it, and a browser with Yomitan (scanning with **Shift**, its default) and the five dictionaries of R3 imported; on Android, AnkiDroid (from the Play Store, first-run setup done), the host app (`dokuen-android`), and this plugin with the five dictionaries of R3 imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled, and no sort dictionary chosen.","steps":[
 ["1.1", "Desktop: start Anki."],
 ["1.2", "Desktop: in Yomitan's settings, **Backup** → **Export settings**. Note where the file is saved."],
 ["1.3", "Connect the device to the desktop with USB debugging on. In a terminal, confirm `adb devices` lists it."],
@@ -143,8 +143,8 @@ const PLAN = {
 ["3.9", "Confirm **Show card tags and flags**, or anything like it, is nowhere in the Anki Export tab."]
 ]},
 {"n":4,"title":"Desktop Yomitan settings (desktop)","note":"","steps":[
-["4.1", "In Yomitan's settings, **Backup** → **Import settings**, and import `yomitan-settings-anki-test-plan.json` from the folder setup wrote (`anki-test-plan-reports/<date-time>-setup/`). This sets desktop's dictionaries, frequency sorting, duplicate settings and the 5 card formats (R2)."],
-["4.2", "In the **Anki** section, open **Configure Anki flashcards…**. Confirm it lists `AuditVocab`, `AuditKanjiFmt`, `AuditSub`, `AuditQuoteKey` and `AuditBadMarker`, in that order."]
+["4.1", "In Yomitan's settings, **Backup** → **Import settings**, and import `yomitan-settings-anki-test-plan.json` from the folder setup wrote (`anki-test-plan-reports/<date-time>-setup/`). This sets desktop's dictionaries, frequency sorting, duplicate settings, and the 5 card formats (R2)."],
+["4.2", "In the **Anki** section, open **Configure Anki flashcards…**. Confirm it lists `AuditVocab`, `AuditKanjiFmt`, `AuditSub`, `AuditQuoteKey`, and `AuditBadMarker`, in that order."]
 ]},
 {"n":5,"title":"Plugin card formats (Android)","note":"In the plugin's **Anki Export** tab, build the 5 card formats in the tab-strip editor. Every value is saved as you type; there is no Save button. For each format, set the note type **last**: choosing it fills in every field, and changing the type afterwards would not refill them.","steps":[
 ["5.1", "Open the **Expression** format's tab. Set name `AuditVocab`, type **Term**, icon **Big Circle**, deck `AuditTest`, then note type `AuditTerm`. Confirm 44 field rows appear, named as the note type's fields (starting `Expression`, `Reading`, `Glossary`). Confirm every field shows `{` + its own name in lower case + `}` (`Expression` shows `{expression}`, `furigana-plain` shows `{furigana-plain}`), except `single-frequency-number`, which stays empty (R2). Note any other field that differs, then type the correct value into it. Set `single-frequency-number` to `{single-frequency-number}`."],
@@ -159,8 +159,8 @@ const PLAN = {
 ["6.3", "**Card tags**: a text field on both. Confirm both label it **Card tags**. Its value is not compared: the default tag differs on purpose (R7)."],
 ["6.4", "**Check for card duplicates**: a toggle on both. Confirm both label it **Check for card duplicates**."],
 ["6.5", "**Check for duplicates across all models**: a toggle on both, shown while **Check for card duplicates** is on. Confirm both label it **Check for duplicates across all models**."],
-["6.6", "**Duplicate card scope**: confirm both offer **Collection**, **Deck** and **Deck root**, worded the same."],
-["6.7", "**When a duplicate is detected**: confirm both offer **Prevent adding**, **Allow overwriting** and **Allow adding**, worded the same."],
+["6.6", "**Duplicate card scope**: confirm both offer **Collection**, **Deck**, and **Deck root**, worded the same."],
+["6.7", "**When a duplicate is detected**: confirm both offer **Prevent adding**, **Allow overwriting**, and **Allow adding**, worded the same."],
 ["6.8", "**Screenshot format and quality**: on desktop, under advanced settings. Confirm the plugin has no equivalent."],
 ["6.9", "**Idle download timeout**: on desktop, under advanced settings. Confirm the plugin has no equivalent."],
 ["6.10", "**Suspend new cards**: on desktop, under advanced settings. Confirm the plugin has no equivalent."],
@@ -245,7 +245,7 @@ const PLAN = {
 ["9.14", "AnkiDroid: delete Seed-Sub, then create Seed-Deck again as in 9.6."],
 ["9.15", "Plugin, scope **Deck root**: scan `鉛筆` and tap **Add: AuditSub** (whose deck is `AuditTest::Sub`). Confirm \"already exists\" (the search covers the root deck `AuditTest`, which holds Seed-Deck)."],
 ["9.16", "Set scope **Deck**. Scan `鉛筆` again and tap **Add: AuditSub**. Confirm it is **not** a duplicate and a note is added to `AuditTest::Sub` (Seed-Deck is outside `AuditTest::Sub`)."],
-["9.17", "AnkiDroid: delete every `鉛筆` note. Open **Add**: type `AuditKanji` (a different note type), deck `AuditTest`, Character `鉛筆`, Kunyomi, Onyomi and Glossary `n/a`, every other field empty. Save."],
+["9.17", "AnkiDroid: delete every `鉛筆` note. Open **Add**: type `AuditKanji` (a different note type), deck `AuditTest`, Character `鉛筆`, Kunyomi, Onyomi, and Glossary `n/a`, every other field empty. Save."],
 ["9.18", "Plugin: set scope **Collection**, across all models off. Scan `鉛筆` and tap **Add: AuditVocab**. Confirm it is **not** a duplicate (a different note type, not checked) and a note is added."],
 ["9.19", "AnkiDroid: delete the note just added. Plugin: turn across all models **on**. Scan `鉛筆` and tap **Add: AuditVocab**. Confirm \"already exists\": across all models compares each note's first field, whatever its name, so the `AuditKanji` note, whose first field `Character` is `鉛筆`, is a duplicate."],
 ["9.20", "Plugin: turn across all models off and set **Allow adding**. Scan `手紙` and tap **Add: AuditQuoteKey** on 手紙【てがみ】 (its Expression becomes `手紙\"`). Confirm it succeeds."],
@@ -259,13 +259,13 @@ const PLAN = {
 ]},
 {"n":11,"title":"Icons and link states (desktop and Android)","note":"The colors of R7: green (can add), orange (a duplicate exists and would be overwritten), purple (a duplicate exists and another note would be added), gray (a duplicate exists and adding is prevented).","steps":[
 ["11.1", "On both, set \"When a duplicate is detected\" to **Allow overwriting** (on the plugin, with Dokuen's overlay hidden)."],
-["11.2", "Desktop: scan `猫`, and then `犬` and, in its popup, click `犬` in the 犬【いぬ】 entry's headword (words no step adds, so no duplicate exists). Confirm the **AuditVocab**, **AuditSub**, **AuditQuoteKey** and **AuditBadMarker** buttons (on 猫【ねこ】) and the **AuditKanjiFmt** button (on the 犬 kanji entry) are all the same green, told apart only by shape."],
+["11.2", "Desktop: scan `猫`, and then `犬` and, in its popup, click `犬` in the 犬【いぬ】 entry's headword (words no step adds, so no duplicate exists). Confirm the **AuditVocab**, **AuditSub**, **AuditQuoteKey**, and **AuditBadMarker** buttons (on 猫【ねこ】) and the **AuditKanjiFmt** button (on the 犬 kanji entry) are all the same green, told apart only by shape."],
 ["11.3", "Plugin: scan `猫`, and then `犬` and tap `犬` in the 犬【いぬ】 entry's headword. Confirm **AuditVocab** is prefixed ●, **AuditSub** and **AuditBadMarker** ■, **AuditQuoteKey** ◉, and **AuditKanjiFmt** ◆, all in the same green."],
-["11.4", "Desktop: scan `食べる` (notes for it now exist). On 食べる【たべる】, confirm the **AuditVocab**, **AuditSub** and **AuditBadMarker** buttons show their overwrite (orange) variant and **AuditQuoteKey** is green (no note's first field is `食べる\"`). Click **AuditQuoteKey**. Confirm its button turns orange too."],
-["11.5", "Plugin: scan `食べる`. Confirm every link on 食べる【たべる】 is green and reads **Add**: the plugin checks for duplicates only once a link of the entry is tapped (R7). Tap **Add: AuditQuoteKey**. Confirm it now reads **Added: AuditQuoteKey**, and that it and the **AuditVocab**, **AuditSub** and **AuditBadMarker** links are orange, as desktop's buttons ended in 11.4."],
+["11.4", "Desktop: scan `食べる` (notes for it now exist). On 食べる【たべる】, confirm the **AuditVocab**, **AuditSub**, and **AuditBadMarker** buttons show their overwrite (orange) variant and **AuditQuoteKey** is green (no note's first field is `食べる\"`). Click **AuditQuoteKey**. Confirm its button turns orange too."],
+["11.5", "Plugin: scan `食べる`. Confirm every link on 食べる【たべる】 is green and reads **Add**: the plugin checks for duplicates only once a link of the entry is tapped (R7). Tap **Add: AuditQuoteKey**. Confirm it now reads **Added: AuditQuoteKey**, and that it and the **AuditVocab**, **AuditSub**, and **AuditBadMarker** links are orange, as desktop's buttons ended in 11.4."],
 ["11.6", "Tap **Added: AuditQuoteKey**. Confirm it now reads **Overwritten: AuditQuoteKey** and stays orange: like desktop's overwrite button, the second tap overwrote the note the first one added."],
 ["11.7", "On both, set \"When a duplicate is detected\" to **Allow adding** (on the plugin, with Dokuen's overlay hidden). Desktop: scan `食べる`, and confirm the four buttons on 食べる【たべる】 show their add-duplicate (purple) variant. Plugin: scan `食べる` and tap **Add: AuditVocab**. Confirm it reads **Added: AuditVocab**, and that it and the other three links are purple, like desktop's buttons."],
-["11.8", "Plugin: confirm there is no link to view a note in AnkiDroid (\"View in Anki\", \"Edit\" or similar) anywhere (R7)."]
+["11.8", "Plugin: confirm there is no link to view a note in AnkiDroid (\"View in Anki\", \"Edit\", or similar) anywhere (R7)."]
 ]},
 {"n":12,"title":"Errors and edge cases (Android, then desktop)","note":"","steps":[
 ["12.1", "Plugin: scan `食べる`. Tap `食` in the 食べる【たべる】 entry's headword, then use the dictionary window's back button to return to 食べる. Tap **Add: AuditVocab**. Confirm it succeeds (a result you go back to keeps working links)."],

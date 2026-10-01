@@ -104,7 +104,7 @@ DICTIONARIES = [
 ]
 # The test page (R5): every word the plan scans, each on a line of its own that ends with a
 # sentence terminator, so that both platforms cut the sentence at the line; then the paragraph T8
-# and K2 are scanned from; then the words only Phases 9, 11 and 12 scan.
+# and K2 are scanned from; then the words only Phases 9, 11, and 12 scan.
 PAGE_WORDS = ['食べる', '動き出す', 'お見舞い', '食べさせられた', '牛', '京都', '学習辞典', '時雨', '鳥居',
               '千鳥', '順路', '記号', '學校']
 TEST_PARAGRAPH = '雨が降っていた。電車が動き出す前に座った。窓の外は暗かった。'
@@ -567,7 +567,7 @@ def compare_styled(report, step, label, field, d_value, p_value):
             if css_structure(d_css) != css_structure(p_css):
                 if status == 'PASS':
                     status = 'REVIEW'
-                report.add(step, 'REVIEW', label, '%s <style> #%d: the rules, selectors or property names differ '
+                report.add(step, 'REVIEW', label, '%s <style> #%d: the rules, selectors, or property names differ '
                            '(value spelling and whitespace may differ; anything else is a finding)' % (
                                field, index + 1), d_css, p_css)
     d_images, p_images = IMAGE_PATTERN.findall(d_body), IMAGE_PATTERN.findall(p_body)
@@ -907,9 +907,9 @@ def check_structured_content(report, desktop, plugin):
         d_styles = split_styles(d.get('Glossary'))[1]
         same = [css_structure(a) == css_structure(b) for a, b in zip(d_styles, p_styles)]
         if len(d_styles) == len(p_styles) and all(same):
-            report.add('C7.11', 'PASS', 'T1', 'same rules, selectors and property names on both')
+            report.add('C7.11', 'PASS', 'T1', 'same rules, selectors, and property names on both')
         else:
-            report.add('C7.11', 'REVIEW', 'T1', 'rules, selectors or property names differ: compare by hand',
+            report.add('C7.11', 'REVIEW', 'T1', 'rules, selectors, or property names differ: compare by hand',
                        '\n\n'.join(d_styles), '\n\n'.join(p_styles))
         for platform, note in zip(('desktop', 'plugin'), pairs['T1']):
             check_scoped_first_style(report, 'C7.12', 'T1', 'glossary-first', note.get('glossary-first'), platform)
@@ -948,7 +948,7 @@ def check_tags_and_markers(report, desktop, plugin):
             report.add('C9.1', 'PASS' if tags == wanted else 'FAIL', '食べる',
                        '%s tags are exactly %s' % (platform, ', '.join(wanted)),
                        ' '.join(tags) if platform == 'desktop' else None, ' '.join(tags) if platform == 'plugin' else None)
-        # The unknown-marker note is the fourth 食べる note each add pass makes (after T1, T4 and the
+        # The unknown-marker note is the fourth 食べる note each add pass makes (after T1, T4, and the
         # tagged note).
         bad_marker = find_note(notes, 'AuditTerm', '食べる', 4)
         if bad_marker is None:
@@ -977,7 +977,7 @@ def check_plugin_settings(report, state):
         actual = (stored.get('type'), stored.get('deckName'), stored.get('modelName'), stored.get('icon'))
         wanted = (entry_type.upper(), deck, note_type, PLUGIN_ICONS[icon])
         report.add('C1.2', 'PASS' if actual == wanted else 'FAIL', name,
-                   'type, deck, note type and icon are %s, expected %s' % (actual, wanted))
+                   'type, deck, note type, and icon are %s, expected %s' % (actual, wanted))
         stored_fields = stored.get('fields', {})
         values = field_values(note_type, changes)
         wrong = {field: stored_fields.get(field, {}).get('value') for field, value in values.items()

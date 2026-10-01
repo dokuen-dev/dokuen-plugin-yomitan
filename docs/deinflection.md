@@ -8,12 +8,12 @@ as directly as possible, so a lookup finds the same entries through the same con
 
 | File | Responsibility |
 |---|---|
-| `parser/JapaneseTransforms.kt` | The original's Japanese rules (`ext/js/language/ja/japanese-transforms.js`): its word classes ("conditions") and, for each conjugation ("transform"), its key, English and Japanese names, English description and rules. **Generated; do not edit.** The header names the original's commit it was generated from. |
+| `parser/JapaneseTransforms.kt` | The original's Japanese rules (`ext/js/language/ja/japanese-transforms.js`): its word classes ("conditions") and, for each conjugation ("transform"), its key, English and Japanese names, English description, and rules. **Generated; do not edit.** The header names the original's commit it was generated from. |
 | `parser/JapaneseDeinflector.kt` | The data types the generated file uses, and a port of the original's `LanguageTransformer` (`ext/js/language/language-transformer.js`). |
 | `scripts/generate_japanese_transforms.mjs` | Writes `JapaneseTransforms.kt`. |
 | `YomitanDictionaryPluginService.kt` | Looks up what the deinflector produces and shows the chain of conjugations above the entry. |
 
-To update the rules to a newer original, run, from this repository's root and with Node:
+To update the rules to a newer original, run the following with Node from this repository's root:
 
 ```
 node scripts/generate_japanese_transforms.mjs <path to a Yomitan checkout>
@@ -25,7 +25,7 @@ format cannot hold, such as a rule type other than the suffix and whole-word rul
 
 ## How it works
 
-Every rule undoes one ending (a suffix, or a whole word), and carries two sets of word classes: the
+Every rule undoes one ending (a suffix or a whole word) and carries two sets of word classes: the
 classes the text must have for the rule to apply (`conditionsIn`), and the class the result has
 (`conditionsOut`). The passive rule that turns 取られる into 取る, for example, applies to an ichidan
 verb and produces a godan verb. A class can stand for several others (`v` is every kind of verb), and

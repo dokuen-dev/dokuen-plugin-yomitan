@@ -108,7 +108,7 @@ class AnkiE2ETest {
             // AddContentApi cannot run under Robolectric (no AnkiDroid app present), so the
             // real client fails at its first gate. Reaching that "AnkiDroid not installed"
             // error proves only that the link's token resolved to a cached lookup, its format
-            // was found and export was enabled; rendering the field values and the AnkiDroid
+            // was found, and export was enabled; rendering the field values and the AnkiDroid
             // calls themselves are covered against a mocked client in AnkiExecutionTest.
             try {
                 service.onExecuteCustomAction(payload)
