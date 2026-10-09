@@ -1,6 +1,7 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
@@ -11,6 +12,8 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteInfo
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
@@ -22,6 +25,8 @@ import io.github.dokuendev.dokuenreader.dictionary.CustomActionResult
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryEntry
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryException
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryResult
+import io.github.dokuendev.dokuenreader.dictionary.ImageRequestResult
+import io.github.dokuendev.dokuenreader.dictionary.ImageRequestSource
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -45,6 +50,8 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.whenever
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.net.URLEncoder
 
 /**
@@ -203,7 +210,7 @@ class AnkiExecutionTest {
 
     private suspend fun executeError(service: YomitanDictionaryPluginService, payload: String): String {
         try {
-            service.onExecuteCustomAction(payload)
+            service.executeAction(payload)
         } catch (e: DictionaryException) {
             return e.message ?: ""
         }
@@ -220,7 +227,7 @@ class AnkiExecutionTest {
         val service = newService(settings(tags = listOf("dokuen", "mined")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         val tagsCaptor = argumentCaptor<Set<String>>()
@@ -238,7 +245,7 @@ class AnkiExecutionTest {
         val service = newService(settings(badFormat), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
@@ -261,7 +268,7 @@ class AnkiExecutionTest {
         val service = newService(settings(fmt), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
@@ -281,7 +288,7 @@ class AnkiExecutionTest {
         val service = newService(settings(fmt), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
@@ -297,7 +304,7 @@ class AnkiExecutionTest {
         )
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         verify(client).findDuplicateNotes(
             modelId = 2L,
@@ -315,7 +322,7 @@ class AnkiExecutionTest {
         val service = newService(settings(behavior = AnkiDuplicateBehavior.PREVENT), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         assertTrue(result is CustomActionResult.SuccessMessage)
         assertTrue((result as CustomActionResult.SuccessMessage).message.contains("already exists"))
@@ -336,7 +343,7 @@ class AnkiExecutionTest {
         val service = newService(settings(fmt, behavior = AnkiDuplicateBehavior.OVERWRITE), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).updateNoteFields(eq(55L), fieldsCaptor.capture())
@@ -353,7 +360,7 @@ class AnkiExecutionTest {
         val service = newService(settings(behavior = AnkiDuplicateBehavior.ALWAYS_ADD), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         verify(client).addNote(any(), any(), any(), any())
         verify(client, never()).updateNoteFields(any(), any())
@@ -365,7 +372,7 @@ class AnkiExecutionTest {
         val service = newService(settings(checkForDuplicates = false), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         verify(client, never()).findDuplicateNotes(any(), any(), any(), any<AnkiDuplicateScope>(), any())
         verify(client).addNote(any(), any(), any(), any())
@@ -378,7 +385,7 @@ class AnkiExecutionTest {
         val service = newService(settings(fmt), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         verify(client, never()).findDuplicateNotes(any(), any(), any(), any<AnkiDuplicateScope>(), any())
         verify(client).addNote(any(), any(), any(), any())
@@ -459,7 +466,7 @@ class AnkiExecutionTest {
         // first one's UpdateResult carries: the host replaces its display with that result.
         lookup(service, "水入り")
 
-        val result = service.onExecuteCustomAction(firstPayload)
+        val result = service.executeAction(firstPayload)
 
         assertTrue(result is CustomActionResult.UpdateResult)
         val entries = (result as CustomActionResult.UpdateResult).result.entries
@@ -483,7 +490,7 @@ class AnkiExecutionTest {
                 tags = listOf("new-tag")
             )
         )
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         val tagsCaptor = argumentCaptor<Set<String>>()
         verify(client).addNote(eq(2L), eq(1L), any(), tagsCaptor.capture())
@@ -536,8 +543,8 @@ class AnkiExecutionTest {
 
         assertTrue(message, message.contains("expired"))
         // The newest lookups are still usable.
-        assertNotNull(service.onExecuteCustomAction(secondPayload))
-        assertNotNull(service.onExecuteCustomAction(thirdPayload))
+        assertNotNull(service.executeAction(secondPayload))
+        assertNotNull(service.executeAction(thirdPayload))
     }
 
     @Test
@@ -580,7 +587,7 @@ class AnkiExecutionTest {
         assertEquals(60, entries.size)
 
         for (entry in listOf(entries.first(), entries.last())) {
-            val result = service.onExecuteCustomAction(addPayloads(entry).single())
+            val result = service.executeAction(addPayloads(entry).single())
             assertTrue(result is CustomActionResult.UpdateResult)
         }
     }
@@ -618,7 +625,7 @@ class AnkiExecutionTest {
         )
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         verify(client).updateNoteFields(eq(55L), eq(listOf("食べる", "たべる")))
         verify(client, never()).updateNoteFields(eq(70L), any())
@@ -635,7 +642,7 @@ class AnkiExecutionTest {
         )
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         verify(client).addNote(eq(2L), eq(1L), eq(listOf("食べる (たべる)", "たべる")), any())
         verify(client, never()).updateNoteFields(any(), any())
@@ -649,7 +656,7 @@ class AnkiExecutionTest {
         val service = newService(settings(behavior = AnkiDuplicateBehavior.PREVENT), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         verify(client, never()).addNote(any(), any(), any(), any())
         verify(client, never()).updateNoteFields(any(), any())
@@ -672,7 +679,7 @@ class AnkiExecutionTest {
             )
         }
 
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
@@ -710,7 +717,7 @@ class AnkiExecutionTest {
         val entry = lookup(service, "食べる").entries[0]
         val payloads = addPayloads(entry)
 
-        val updated = updatedEntry(service.onExecuteCustomAction(payloads[1]))
+        val updated = updatedEntry(service.executeAction(payloads[1]))
 
         assertEquals(listOf("● Add: Vocab", "● Added: Sentences", "● Add: Cloze"), linkLabels(updated))
         // Every link still leads where it did, and the text before the links is unchanged.
@@ -728,10 +735,10 @@ class AnkiExecutionTest {
         val client = mockClient()
         val service = newService(settings(behavior = AnkiDuplicateBehavior.PREVENT), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
         stubDuplicates(client, listOf(duplicate(999L, "食べる (たべる)", "たべる")))
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         assertTrue((result as CustomActionResult.SuccessMessage).message.contains("already exists"))
         verify(client).addNote(any(), any(), any(), any())
@@ -742,10 +749,10 @@ class AnkiExecutionTest {
         val client = mockClient()
         val service = newService(settings(behavior = AnkiDuplicateBehavior.OVERWRITE), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
-        assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(service.onExecuteCustomAction(payload))))
+        assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(service.executeAction(payload))))
         stubDuplicates(client, listOf(duplicate(999L, "食べる (たべる)", "たべる")))
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         verify(client).updateNoteFields(eq(999L), any())
         verify(client).addNote(any(), any(), any(), any())
@@ -757,10 +764,10 @@ class AnkiExecutionTest {
         val client = mockClient()
         val service = newService(settings(behavior = AnkiDuplicateBehavior.ALWAYS_ADD), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
-        service.onExecuteCustomAction(payload)
+        service.executeAction(payload)
         stubDuplicates(client, listOf(duplicate(999L, "食べる (たべる)", "たべる")))
 
-        val result = service.onExecuteCustomAction(payload)
+        val result = service.executeAction(payload)
 
         verify(client, times(2)).addNote(any(), any(), any(), any())
         assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(result)))
@@ -776,8 +783,8 @@ class AnkiExecutionTest {
         val service = newService(settings(badFormat, format(name = "Vocab")), client)
         val payloads = addPayloads(lookup(service, "食べる").entries[0])
 
-        val warning = service.onExecuteCustomAction(payloads[0])
-        val refreshed = service.onExecuteCustomAction(payloads[1])
+        val warning = service.executeAction(payloads[0])
+        val refreshed = service.executeAction(payloads[1])
 
         assertTrue(warning is CustomActionResult.SuccessMessage)
         assertEquals(listOf("● Added: Bad", "● Added: Vocab"), linkLabels(updatedEntry(refreshed)))
@@ -803,7 +810,7 @@ class AnkiExecutionTest {
         assertEquals(listOf(GREEN, GREEN, GREEN), linkColors(entry))
         verifyDuplicateSearches(client, 0)
 
-        val updated = updatedEntry(service.onExecuteCustomAction(addPayloads(entry)[0]))
+        val updated = updatedEntry(service.executeAction(addPayloads(entry)[0]))
 
         assertEquals(listOf("● Added: Vocab", "● Add: Sentences", "● Add: Cloze"), linkLabels(updated))
         // The added note would now be overwritten, like Sentences' note; Cloze would get a new one.
@@ -839,7 +846,7 @@ class AnkiExecutionTest {
                 client
             )
 
-            val result = service.onExecuteCustomAction(addPayloads(lookup(service, "食べる").entries[0])[0])
+            val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0])[0])
 
             // Both formats now have a duplicate, so both show what their next tap would do.
             assertEquals(behavior.name, listOf(color, color), linkColors(updatedEntry(result)))
@@ -868,7 +875,7 @@ class AnkiExecutionTest {
         val query = "?query=${URLEncoder.encode("か*", "UTF-8")}"
         val entries = service.onLookup(query, 0, query.length).entries
 
-        val result = service.onExecuteCustomAction(addPayloads(entries[0])[0])
+        val result = service.executeAction(addPayloads(entries[0])[0])
 
         val updated = (result as CustomActionResult.UpdateResult).result.entries
         assertEquals(listOf(PURPLE, PURPLE), linkColors(updated[0]))
@@ -884,7 +891,7 @@ class AnkiExecutionTest {
             client
         )
 
-        val result = service.onExecuteCustomAction(addPayloads(lookup(service, "食べる").entries[0])[0])
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0])[0])
 
         assertEquals(listOf(PURPLE, GREEN), linkColors(updatedEntry(result)))
         verifyDuplicateSearches(client, 0)
@@ -900,8 +907,8 @@ class AnkiExecutionTest {
         )
         val payloads = addPayloads(lookup(service, "食べる").entries[0])
 
-        val prevented = service.onExecuteCustomAction(payloads[0])
-        val refreshed = updatedEntry(service.onExecuteCustomAction(payloads[1]))
+        val prevented = service.executeAction(payloads[0])
+        val refreshed = updatedEntry(service.executeAction(payloads[1]))
 
         assertTrue((prevented as CustomActionResult.SuccessMessage).message.contains("already exists"))
         assertEquals(listOf("● Add: Vocab", "● Added: Other"), linkLabels(refreshed))
@@ -919,7 +926,7 @@ class AnkiExecutionTest {
             client
         )
 
-        val result = service.onExecuteCustomAction(addPayloads(lookup(service, "食べる").entries[0])[0])
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0])[0])
 
         assertEquals(listOf(GRAY, GREEN), linkColors(updatedEntry(result)))
     }
@@ -1157,7 +1164,7 @@ class AnkiExecutionTest {
         )
         val service = newService(settings(fmt), client)
 
-        service.onExecuteCustomAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
 
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
@@ -1167,5 +1174,361 @@ class AnkiExecutionTest {
                 "</li><style>.yomitan-glossary [data-dictionary=\"$dictTitle\"] a { color: red; }</style></ol></div>"
             )
         )
+    }
+
+    private fun imageFormat(
+        picture: String = "{screenshot}",
+        mode: AnkiFieldOverwriteMode = AnkiFieldOverwriteMode.COALESCE
+    ) = format(
+        fields = mapOf(
+            "Front" to AnkiField(value = "{expression}"),
+            "Back" to AnkiField(value = picture, overwriteMode = mode)
+        )
+    )
+
+    private fun image() = ImageRequestResult.Image(Bitmap.createBitmap(4, 3, Bitmap.Config.ARGB_8888))
+
+    /** Stubs addImage to run its writer and store under [storedAs]; returns what each call wrote. */
+    private fun stubAddImage(client: AnkiDroidClient, storedAs: (String) -> String? = { it }): List<ByteArray> {
+        val written = mutableListOf<ByteArray>()
+        whenever(client.addImage(any(), any())).thenAnswer {
+            @Suppress("UNCHECKED_CAST")
+            val write = it.arguments[1] as (OutputStream) -> Boolean
+            val out = ByteArrayOutputStream()
+            if (!write(out)) return@thenAnswer null
+            written += out.toByteArray()
+            storedAs(it.arguments[0] as String)
+        }
+        return written
+    }
+
+    @Test
+    fun screenshotIsRequestedAndWrittenIntoTheNote() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) }
+        val service = newService(settings(imageFormat()), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image()))
+
+        service.executeAction(payload, context)
+
+        assertEquals(listOf(ImageRequestSource.SCREENSHOT to false), context.requests)
+        val nameCaptor = argumentCaptor<String>()
+        verify(client).addImage(nameCaptor.capture(), any())
+        assertTrue(nameCaptor.firstValue.matches(Regex("dokuen_screenshot_\\d{4}(-\\d{2}){5}-\\d{3}\\.png")))
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("<img src=\"${nameCaptor.firstValue}\" />", fieldsCaptor.firstValue[1])
+    }
+
+    @Test
+    fun cropSettingMakesTheRequestInteractiveAndJpegIsUsed() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) }
+        val service = newService(
+            settings(imageFormat()).copy(
+                screenshotBehavior = AnkiScreenshotBehavior.CROP,
+                screenshotFormat = AnkiScreenshotFormat.JPEG
+            ),
+            client
+        )
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image()))
+
+        service.executeAction(payload, context)
+
+        assertEquals(listOf(ImageRequestSource.SCREENSHOT to true), context.requests)
+        val nameCaptor = argumentCaptor<String>()
+        verify(client).addImage(nameCaptor.capture(), any())
+        assertTrue(nameCaptor.firstValue.endsWith(".jpeg"))
+    }
+
+    @Test
+    fun clipboardImageIsPngWhateverTheScreenshotFormat() = runBlocking<Unit> {
+        val client = mockClient()
+        val written = stubAddImage(client)
+        val service = newService(
+            settings(imageFormat(picture = "{screenshot}{clipboard-image}"))
+                .copy(screenshotFormat = AnkiScreenshotFormat.JPEG),
+            client
+        )
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(
+            mapOf(ImageRequestSource.SCREENSHOT to image(), ImageRequestSource.CLIPBOARD to image())
+        )
+
+        service.executeAction(payload, context)
+
+        val nameCaptor = argumentCaptor<String>()
+        verify(client, times(2)).addImage(nameCaptor.capture(), any())
+        assertTrue(nameCaptor.firstValue.endsWith(".jpeg"))
+        assertTrue(nameCaptor.secondValue, nameCaptor.secondValue.matches(Regex("dokuen_clipboard_image_.*\\.png")))
+        // The PNG signature's first bytes.
+        assertEquals(listOf(0x89, 0x50, 0x4E, 0x47), written[1].take(4).map { it.toInt() and 0xFF })
+    }
+
+    @Test
+    fun outOfRangeJpegQualityStillStoresTheImage() = runBlocking<Unit> {
+        val client = mockClient()
+        val written = stubAddImage(client)
+        val service = newService(
+            settings(imageFormat()).copy(screenshotFormat = AnkiScreenshotFormat.JPEG, screenshotQuality = 150),
+            client
+        )
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
+
+        assertEquals(1, written.size)
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertTrue(fieldsCaptor.firstValue[1], fieldsCaptor.firstValue[1].startsWith("<img src=\"dokuen_screenshot_"))
+    }
+
+    @Test
+    fun anImageThatCannotBeStoredStillWritesTheNoteAndSaysSo() = runBlocking<Unit> {
+        val client = mockClient()
+        whenever(client.addImage(any(), any())).thenThrow(IllegalStateException("cannot store"))
+        val service = newService(settings(imageFormat()), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
+
+        verify(client).addNote(any(), any(), any(), any())
+        val message = (result as CustomActionResult.SuccessMessage).message
+        assertTrue(message, message.contains("{screenshot}"))
+    }
+
+    @Test
+    fun noRequestWithoutAnImageMarker() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext()
+
+        service.executeAction(payload, context)
+
+        assertTrue(context.requests.isEmpty())
+        verify(client).addNote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun screenshotThenClipboardAreBothRequested() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) }
+        val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(
+            mapOf(ImageRequestSource.SCREENSHOT to image(), ImageRequestSource.CLIPBOARD to image())
+        )
+
+        service.executeAction(payload, context)
+
+        assertEquals(
+            listOf(ImageRequestSource.SCREENSHOT to false, ImageRequestSource.CLIPBOARD to false),
+            context.requests
+        )
+        val nameCaptor = argumentCaptor<String>()
+        verify(client, times(2)).addImage(nameCaptor.capture(), any())
+        assertTrue(nameCaptor.secondValue.startsWith("dokuen_clipboard_image_"))
+    }
+
+    @Test
+    fun noImageLeavesTheMarkerEmpty() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat()), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        service.executeAction(payload, FakeActionContext())
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("", fieldsCaptor.firstValue[1])
+        verify(client, never()).addImage(any(), any())
+    }
+
+    @Test
+    fun cancelWritesNothingAndSkipsTheClipboard() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Cancelled))
+
+        service.executeAction(payload, context)
+
+        assertEquals(listOf(ImageRequestSource.SCREENSHOT to false), context.requests)
+        verify(client, never()).addNote(any(), any(), any(), any())
+        verify(client, never()).updateNoteFields(any(), any())
+    }
+
+    @Test
+    fun preventedDuplicateRequestsNothing() = runBlocking<Unit> {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.PREVENT), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image()))
+
+        service.executeAction(payload, context)
+
+        assertTrue(context.requests.isEmpty())
+    }
+
+    @Test
+    fun overwritingASkippedImageFieldRequestsNothing() = runBlocking<Unit> {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val service = newService(
+            settings(imageFormat(mode = AnkiFieldOverwriteMode.SKIP), behavior = AnkiDuplicateBehavior.OVERWRITE),
+            client
+        )
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image()))
+
+        service.executeAction(payload, context)
+
+        assertTrue(context.requests.isEmpty())
+        verify(client).updateNoteFields(eq(55L), any())
+    }
+
+    @Test
+    fun overwriteMergesTheImageIntoTheExistingNote() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) { "stored.png" } }
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).updateNoteFields(eq(55L), fieldsCaptor.capture())
+        assertEquals("<img src=\"stored.png\" />", fieldsCaptor.firstValue[1])
+    }
+
+    @Test
+    fun screenshotInTheFirstFieldDoesNotChangeTheDuplicateKey() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) }
+        val firstFieldImage = format(
+            fields = mapOf("Front" to AnkiField("{expression}{screenshot}"), "Back" to AnkiField("{reading}"))
+        )
+        val service = newService(settings(firstFieldImage), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
+
+        verify(client).findDuplicateNotes(any(), any(), eq("食べる"), any<AnkiDuplicateScope>(), any())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertTrue(fieldsCaptor.firstValue[0].startsWith("食べる<img src=\"dokuen_screenshot_"))
+    }
+
+    @Test
+    fun failedMediaInsertStillWritesTheNoteAndSaysSo() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) { null } }
+        val service = newService(settings(imageFormat()), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("", fieldsCaptor.firstValue[1])
+        val message = (result as CustomActionResult.SuccessMessage).message
+        assertTrue(message, message.contains("{screenshot}"))
+    }
+
+    @Test
+    fun deniedWritesTheNoteWithoutImagesAndSaysWhy() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) }
+        val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(
+            mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Denied, ImageRequestSource.CLIPBOARD to image())
+        )
+
+        val result = service.executeAction(payload, context)
+
+        assertEquals(listOf(ImageRequestSource.SCREENSHOT to false), context.requests)
+        verify(client, never()).addImage(any(), any())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("", fieldsCaptor.firstValue[1])
+        val message = (result as CustomActionResult.SuccessMessage).message
+        assertTrue(message, message.contains("Dokuen Pro"))
+    }
+
+    @Test
+    fun clipboardTextIsRequestedAndRendered() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat(picture = "{clipboard-text}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(clipboardText = "line 1\nline <2>")
+
+        service.executeAction(payload, context)
+
+        assertEquals(1, context.textRequests)
+        assertTrue(context.requests.isEmpty())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("line 1<br>\nline &lt;2&gt;", fieldsCaptor.firstValue[1])
+    }
+
+    @Test
+    fun clipboardTextLineBreaksAreNormalizedAsTheOriginalsPasteTargetDoes() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat(picture = "{clipboard-text}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        service.executeAction(payload, FakeActionContext(clipboardText = "a\r\nb\rc\nd"))
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("a<br>\nb<br>\nc<br>\nd", fieldsCaptor.firstValue[1])
+    }
+
+    @Test
+    fun clipboardTextIsRequestedAfterImagesEvenWhenTheyAreDenied() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat(picture = "{screenshot}|{clipboard-text}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(
+            mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Denied),
+            clipboardText = "copied"
+        )
+
+        val result = service.executeAction(payload, context)
+
+        assertEquals(listOf(ImageRequestSource.SCREENSHOT to false), context.requests)
+        assertEquals(1, context.textRequests)
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("|copied", fieldsCaptor.firstValue[1])
+        val message = (result as CustomActionResult.SuccessMessage).message
+        assertTrue(message, message.contains("Dokuen Pro"))
+    }
+
+    @Test
+    fun cancelSkipsTheClipboardText() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-text}")), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(
+            mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Cancelled),
+            clipboardText = "copied"
+        )
+
+        service.executeAction(payload, context)
+
+        assertEquals(0, context.textRequests)
+        verify(client, never()).addNote(any(), any(), any(), any())
+    }
+
+    @Test
+    fun noClipboardTextWithoutTheMarker() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(imageFormat()), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext(clipboardText = "copied")
+
+        service.executeAction(payload, context)
+
+        assertEquals(0, context.textRequests)
     }
 }

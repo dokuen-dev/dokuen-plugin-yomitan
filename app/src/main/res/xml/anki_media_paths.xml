@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Images handed to AnkiDroid's media store -->
+    <cache-path
+        name="anki_media"
+        path="anki_media/" />
+</paths>

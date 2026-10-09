@@ -1,19 +1,28 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
+import java.io.File
+import java.io.OutputStream
 
 data class AnkiNoteInfo(val id: Long, val modelId: Long, val fields: List<String>, val tags: Set<String>)
 
 class AnkiDroidClient(
     private val context: Context,
     private val api: AddContentApi = AddContentApi(context),
-    private val contentResolver: ContentResolver = context.contentResolver
+    private val contentResolver: ContentResolver = context.contentResolver,
+    /** The FileProvider URI AnkiDroid reads a temporary image file through. */
+    private val mediaUri: (File) -> Uri = { file ->
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }
 ) {
     companion object {
         const val PERMISSION: String = AddContentApi.READ_WRITE_PERMISSION
@@ -23,13 +32,15 @@ class AnkiDroidClient(
             FlashCardsContract.Note.FLDS,
             FlashCardsContract.Note.TAGS
         )
+        private const val ANKIDROID_PACKAGE = "com.ichi2.anki"
+        private const val MEDIA_CACHE_DIR = "anki_media"
     }
 
     fun isAnkiDroidInstalled(): Boolean {
         return try {
-            context.packageManager.getPackageInfo("com.ichi2.anki", 0)
+            context.packageManager.getPackageInfo(ANKIDROID_PACKAGE, 0)
             true
-        } catch (e: PackageManager.NameNotFoundException) {
+        } catch (_: PackageManager.NameNotFoundException) {
             false
         }
     }
@@ -53,6 +64,34 @@ class AnkiDroidClient(
 
     fun updateNoteFields(noteId: Long, fields: List<String>): Boolean {
         return api.updateNoteFields(noteId, fields.toTypedArray())
+    }
+
+    /**
+     * Stores an image in AnkiDroid's media collection and returns the file name it was stored
+     * under (AnkiDroid may change [fileName] to keep it unique), or null if [write] or AnkiDroid
+     * refused. [write] writes the encoded image into a temporary file and returns false if it
+     * could not. AnkiDroid reads that file through this app's FileProvider; the file and
+     * AnkiDroid's read grant are removed once AnkiDroid has its own copy.
+     */
+    fun addImage(fileName: String, write: (OutputStream) -> Boolean): String? {
+        val directory = File(context.cacheDir, MEDIA_CACHE_DIR).apply { mkdirs() }
+        val file = File(directory, fileName)
+        var uri: Uri? = null
+        try {
+            if (!file.outputStream().buffered().use(write)) return null
+            uri = mediaUri(file)
+            context.grantUriPermission(ANKIDROID_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val values = ContentValues().apply {
+                put(FlashCardsContract.AnkiMedia.FILE_URI, uri.toString())
+                put(FlashCardsContract.AnkiMedia.PREFERRED_NAME, file.nameWithoutExtension)
+            }
+            return contentResolver.insert(FlashCardsContract.AnkiMedia.CONTENT_URI, values)?.lastPathSegment
+        } finally {
+            // AnkiDroid copies the file during insert, so neither the grant nor the file is
+            // needed afterwards. Grants otherwise last until the device reboots.
+            uri?.let { context.revokeUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            file.delete()
+        }
     }
 
     /**

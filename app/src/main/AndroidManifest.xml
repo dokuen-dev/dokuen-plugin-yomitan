@@ -58,6 +58,16 @@
                 android:name="plugin_support_email"
                 android:value="dokuen.reader@gmail.com" />
         </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/anki_media_paths" />
+        </provider>
     </application>
 
 </manifest>

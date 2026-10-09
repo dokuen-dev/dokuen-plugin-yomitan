@@ -150,7 +150,7 @@ plain sentence, see below), `cloze-prefix`, `cloze-body`, `cloze-body-kana`, `cl
 `frequency-harmonic-rank`, `frequency-harmonic-occurrence`,
 `frequency-average-rank`, `frequency-average-occurrence`, `glossary` (+ `-brief`,
 `-no-dictionary`, `-plain`, `-plain-no-dictionary`, `-first`, `-first-brief`,
-`-first-no-dictionary`).
+`-first-no-dictionary`), `screenshot`, `clipboard-image`, and `clipboard-text`.
 
 `{sentence}` and the cloze markers use the sentence around the match (see `AnkiSentenceExtractor`),
 not the whole context text. The host sends the whole OCR block that contains the selection as
@@ -180,6 +180,38 @@ character. Internal `?query=` lookups have no sentence to pass on, only their qu
 deinflection badge does, by its compact Japanese name (`-せる・させる « -られる « -た` for
 食べさせられた; see "Deliberate differences").
 
+`{screenshot}` and `{clipboard-image}` print the original's partials, `<img src="FILE" />` with
+the AnkiDroid media file name, or nothing without an image. Their images come from Dokuen
+(SDK 0.7.0 `CustomActionContext.requestImage`) when a link is tapped, after the duplicate
+decision, and only for markers in fields the write keeps (`AnkiMediaNeeds`): every field
+when adding a note; when overwriting, not a Skip field, and a "Fill if empty" field only if
+it is empty. The screenshot is requested first, interactively when "{screenshot} behavior" is
+"Show crop UI" (Dokuen's crop UI, where the user can also pick a file, continue without an
+image, or cancel), then the clipboard image, without UI. Cancelling writes nothing and skips
+the clipboard. The screenshot is encoded per "Image format" (PNG, or JPEG at "JPEG quality");
+the clipboard image is always PNG (see "Deliberate differences"). Each is stored through
+`AnkiDroidClient.addImage` (the plugin's FileProvider and AnkiDroid's media provider), asking for
+`dokuen_screenshot_<date>.png` and `dokuen_clipboard_image_<date>.png` (the original's names
+with a Dokuen prefix, see "Deliberate differences", and the date as `generateAnkiNoteMediaFileName`
+writes it, zero-based month included), and the marker uses the name AnkiDroid stored it under. The
+file name is escaped twice in `src`, as in the original, where `getMedia` escapes it and the
+double-brace output escapes it again. An image that cannot be encoded or that AnkiDroid does not
+accept leaves its marker empty and is reported after the save, like an unknown marker. Dokuen
+versions older than SDK 0.7.0 provide no images. As of SDK 0.7.0 Dokuen denies images to users
+without Dokuen Pro (`ImageRequestResult.Denied`); the note is written with the image markers empty,
+no further image is requested, and the message after the save says images need Dokuen Pro.
+
+`{clipboard-text}` prints the clipboard's text (`CustomActionContext.requestClipboardText`),
+requested after the images under the same rules, and also when images were denied (Dokuen does
+not gate it on Pro). As the original's `clipboard-text` partial does, the text is HTML-escaped
+(once: the partial's output is triple-brace) and each line break becomes `<br>` followed by the
+line break. CRLF and lone CR line breaks are first turned into LF, as the original's paste into a
+`<textarea>` does when it reads the clipboard. Dokuen hands over plain text cut
+to 10,000 UTF-16 code units; older Dokuen versions provide none, so the marker is empty there.
+
+The duplicate check's key is the first field rendered with the image and clipboard text markers
+empty.
+
 The four frequency aggregates (`{frequency-harmonic-rank}`, `{frequency-harmonic-occurrence}`,
 `{frequency-average-rank}`, `{frequency-average-occurrence}`) take the first value of each
 dictionary, as the original's `getFrequencyNumbers` does, and skip a dictionary whose index.json
@@ -187,9 +219,9 @@ declares the other `frequencyMode`: the rank markers skip `occurrence-based` dic
 occurrence markers `rank-based` ones, and both keep a dictionary that declares no mode.
 
 **Markers that resolve to an empty string** (`AnkiTemplateEngine.stubMarkers`) because the
-backing subsystem doesn't exist in the plugin yet: `audio`, `screenshot`, `clipboard-image`,
-`clipboard-text`, `pitch-accents`, `pitch-accent-graphs`, `pitch-accent-graphs-jj`,
-`pitch-accent-positions`, `pitch-accent-categories`,
+backing subsystem doesn't exist in the plugin yet: `audio`, `pitch-accents`,
+`pitch-accent-graphs`, `pitch-accent-graphs-jj`, `pitch-accent-positions`,
+`pitch-accent-categories`,
 `phonetic-transcriptions`, `popup-selection-text`, `url`, and `document-title`.
 
 **Out of scope entirely:** per-installed-dictionary dynamic markers (`single-glossary-<dict>` and
@@ -316,6 +348,11 @@ if available, and Overwrite (the declaration order of `AnkiFieldOverwriteMode`).
 the switch stays off and a status row with a retry button (or, after a permanent denial, an "Open
 settings" button) stays visible.
 
+An "Images" card (shown with the card formats) holds "{screenshot} behavior" (Full screen, the
+default because desktop Yomitan never prompts, or Show crop UI), "Image format" (PNG, the original's
+default, or JPEG), and, for JPEG, "JPEG quality" (default 92), the original's `anki.screenshot`
+options. They are read live at tap time, not from the link's settings snapshot.
+
 Each format's action-link label is prefixed with a plain shape glyph identifying the format (●
 Big Circle, ◉ Small Circle, ■ Square, and ◆ Diamond, matching the original's 4 icon shapes). As in
 the original, the shape identifies the card format and the color (`InlineStyle.foregroundColor`)
@@ -391,8 +428,8 @@ API surface or a deliberate scope boundary:
   only useful before the first tap, so it would need the per-card-format, per-lookup AnkiDroid
   round-trip that the duplicate check avoids. It is deferred for the same reason (documented in
   `AnkiSettings.kt`).
-- **Everything that needs media or page context** (see the empty markers above) stays empty until
-  the plugin has the matching subsystem.
+- **`{audio}`, the pitch accent markers, and the page-context markers stay empty** until the
+  plugin has the matching subsystem.
 - **Sentence furigana is not implemented (`{sentence-furigana}`, `{sentence-furigana-plain}`): both
   print the plain sentence, without furigana.** The reason is runtime cost. The original builds these with its "scanning parser"
   (`_textParseScanning` in `backend.js`): at every character position of the sentence it runs a
@@ -466,6 +503,33 @@ API surface or a deliberate scope boundary:
   checking is off (with "Allow overwriting" the button then does nothing, since it has no duplicate
   to overwrite). This version's settings screen hides the behavior while checking is off, so it does
   not apply then: every tap adds a note.
+- **`{clipboard-image}` is re-encoded as PNG.** The original stores the clipboard image in its
+  own format, which in Chrome is PNG (it reads the image as a pasted `data:image/png` URL), and
+  ignores the screenshot format setting. Dokuen hands the plugin decoded pixels (possibly scaled
+  down), so the plugin always encodes them as PNG.
+- **Media file names carry AnkiDroid's suffix.** AnkiConnect stores a file under the name the
+  original asks for. AnkiDroid's media provider (`insertMediaFile` in its `CardContentProvider`)
+  instead creates the file with `File.createTempFile(preferredName + "_", ...)`, so the stored
+  name gets a random number before the extension
+  (`dokuen_screenshot_2026-00-05-03-04-05-006_123456789.png`), and takes its extension
+  from Android's MIME table, which gives `.jpg` for JPEG where the original writes `.jpeg`.
+  AnkiDroid has no other way to add media.
+- **A repeated clipboard image is stored again.** The original remembers the last clipboard
+  image it stored and, when the clipboard still holds the same image, stores it again under the
+  same name, so the notes share one file. Through AnkiDroid each add stores a new file (see the
+  previous point).
+- **Images are requested only for fields the write keeps.** The original collects the media a
+  card format uses from all of its fields, and on an overwrite still captures and stores the
+  image of a Skip field, or of a "Fill if empty" field that is not empty, before the merge
+  drops it. The plugin does not ask for those (so Dokuen shows no crop UI for them); the
+  resulting note is the same.
+- **The screenshot is the image Dokuen OCR'ed**, not a capture of a browser tab, optionally
+  cropped or replaced by a file in Dokuen's crop UI.
+- **Media file names start with `dokuen_`.** The original names its images
+  `yomitan_browser_screenshot_<date>` and `yomitan_clipboard_image_<date>`. The plugin uses
+  `dokuen_screenshot_<date>` and `dokuen_clipboard_image_<date>` instead, since the images come
+  from Dokuen rather than a browser tab, and the names show which app added them to the
+  collection. The date part is the same as the original's.
 
 **Quirks kept for parity.** These may look like defects, but they mirror the original's settings page
 and note builder, so users moving between the two get the same behavior. Change them only if
@@ -506,12 +570,15 @@ diverging from the original is the goal.
 Unit tests live under `app/src/test/java/.../anki/` (`AnkiSettingsStoreTest`,
 `AnkiTemplateEngineTest`, `AnkiGlossaryHtmlConverterTest`, `AnkiDictionaryStylesTest`, `AnkiNoteDataBuilderTest`,
 `AnkiSentenceExtractorTest`, `AnkiFieldMergerTest`, `AnkiFieldDefaultsTest`,
-`AnkiStandardMarkersTest`, `AnkiDroidClientTest`, `AnkiFieldChecksumTest`, `TagsTextUtilTest`) plus, at the top level,
+`AnkiStandardMarkersTest`, `AnkiDroidClientTest`, `AnkiFieldChecksumTest`, `TagsTextUtilTest`,
+`AnkiMediaNeedsTest`, `AnkiMediaFileNamesTest`) plus, at the top level,
 `AnkiE2ETest.kt` (the `onLookup` → action-link → `onExecuteCustomAction` round trip) and
 `AnkiExecutionTest.kt` (tapping a link against a mocked `AnkiDroidClient`: every duplicate
 behavior, a deleted deck or note type, the link labels and colors a tap leaves, the link cache,
-settings changing between render and tap, and the sentence and query a scanned term, a tapped
-kanji, and a kanji reached through a headword link each get). All pure-logic classes (the template
+settings changing between render and tap, the sentence and query a scanned term, a tapped
+kanji, and a kanji reached through a headword link each get, and the image and clipboard text
+requests a tap makes, including cancelled and denied images, through `FakeActionContext`, a fake
+host). All pure-logic classes (the template
 engine, the glossary converter, the CSS scoping, the tag-text utility) have plain JUnit coverage
 with no Android dependency; everything touching `Context`/SharedPreferences/the service class uses
 Robolectric. All of these run on the JVM.

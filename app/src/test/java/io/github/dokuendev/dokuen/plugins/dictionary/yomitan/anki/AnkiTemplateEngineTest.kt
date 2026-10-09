@@ -417,4 +417,45 @@ class AnkiTemplateEngineTest {
         val data = AnkiNoteData(type = AnkiEntryType.TERM, expression = "木の木", reading = "きのきのき")
         assertEquals("<ruby>木の木<rt>きのきのき</rt></ruby>", render("{furigana}", data))
     }
+
+    @Test
+    fun imageMarkersRenderTheOriginalsImgTag() {
+        val data = AnkiNoteData(
+            type = AnkiEntryType.TERM,
+            screenshotFileName = "dokuen_screenshot_2026-00-05-03-04-05-006.png",
+            clipboardImageFileName = "a&b.jpeg"
+        )
+
+        assertEquals(
+            "<img src=\"dokuen_screenshot_2026-00-05-03-04-05-006.png\" />",
+            AnkiTemplateEngine.renderField("{screenshot}", data).text
+        )
+        // The original's partial is `<img src="{{getMedia ...}}" />`: getMedia escapes the name and
+        // the double-brace output escapes it again.
+        assertEquals("<img src=\"a&amp;amp;b.jpeg\" />", AnkiTemplateEngine.renderField("{clipboard-image}", data).text)
+    }
+
+    @Test
+    fun imageMarkersAreEmptyWithoutAnImage() {
+        val result =
+            AnkiTemplateEngine.renderField("[{screenshot}{clipboard-image}]", AnkiNoteData(type = AnkiEntryType.KANJI))
+
+        assertEquals("[]", result.text)
+        assertTrue(result.unknownMarkers.isEmpty())
+    }
+
+    @Test
+    fun clipboardTextIsEscapedWithTheOriginalsLineBreaks() {
+        val data = AnkiNoteData(type = AnkiEntryType.TERM, clipboardText = "a<b>\nc & d")
+
+        assertEquals("a&lt;b&gt;<br>\nc &amp; d", AnkiTemplateEngine.renderField("{clipboard-text}", data).text)
+    }
+
+    @Test
+    fun clipboardTextIsEmptyWithoutText() {
+        val result = AnkiTemplateEngine.renderField("[{clipboard-text}]", AnkiNoteData(type = AnkiEntryType.TERM))
+
+        assertEquals("[]", result.text)
+        assertTrue(result.unknownMarkers.isEmpty())
+    }
 }

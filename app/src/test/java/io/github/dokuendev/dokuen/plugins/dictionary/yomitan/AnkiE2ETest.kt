@@ -111,7 +111,7 @@ class AnkiE2ETest {
             // was found, and export was enabled; rendering the field values and the AnkiDroid
             // calls themselves are covered against a mocked client in AnkiExecutionTest.
             try {
-                service.onExecuteCustomAction(payload)
+                service.executeAction(payload)
                 fail("Expected DictionaryException for missing AnkiDroid")
             } catch (e: DictionaryException) {
                 assertTrue(e.message?.contains("AnkiDroid") == true)
@@ -194,7 +194,7 @@ class AnkiE2ETest {
             // Must not throw at all: reaching the correct ("Vocab") format means addNote()
             // gets called with real fields and a real deck/model, succeeding cleanly - unlike
             // reaching "Incomplete", which has no fields configured.
-            service.onExecuteCustomAction(payload)
+            service.executeAction(payload)
 
             val modelIdCaptor = argumentCaptor<Long>()
             val deckIdCaptor = argumentCaptor<Long>()

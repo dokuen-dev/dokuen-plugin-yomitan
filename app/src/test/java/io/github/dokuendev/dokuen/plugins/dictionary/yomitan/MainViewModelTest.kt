@@ -3,6 +3,9 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
@@ -716,5 +719,33 @@ class MainViewModelTest {
         }
         assertEquals(emptyMap<Long, String>(), viewModel.uiState.value.ankiDeckOptions)
         assertEquals(mapOf(1L to "Basic"), viewModel.uiState.value.ankiModelOptions)
+    }
+
+    @Test
+    fun testImageSettingSettersPersistAndUpdateState() {
+        val viewModel = MainViewModel(app)
+
+        viewModel.setAnkiScreenshotBehavior(AnkiScreenshotBehavior.CROP)
+        viewModel.setAnkiScreenshotFormat(AnkiScreenshotFormat.JPEG)
+        viewModel.setAnkiScreenshotQuality(55)
+
+        val state = viewModel.uiState.value.ankiSettings
+        assertEquals(AnkiScreenshotBehavior.CROP, state.screenshotBehavior)
+        assertEquals(AnkiScreenshotFormat.JPEG, state.screenshotFormat)
+        assertEquals(55, state.screenshotQuality)
+        val reloaded = AnkiSettingsStore.load(app)
+        assertEquals(AnkiScreenshotBehavior.CROP, reloaded.screenshotBehavior)
+        assertEquals(AnkiScreenshotFormat.JPEG, reloaded.screenshotFormat)
+        assertEquals(55, reloaded.screenshotQuality)
+    }
+
+    @Test
+    fun testScreenshotQualityIsClamped() {
+        val viewModel = MainViewModel(app)
+
+        viewModel.setAnkiScreenshotQuality(150)
+        assertEquals(100, viewModel.uiState.value.ankiSettings.screenshotQuality)
+        viewModel.setAnkiScreenshotQuality(-5)
+        assertEquals(0, viewModel.uiState.value.ankiSettings.screenshotQuality)
     }
 }

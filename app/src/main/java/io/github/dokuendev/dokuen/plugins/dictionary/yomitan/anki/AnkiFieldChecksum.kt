@@ -27,7 +27,8 @@ object AnkiFieldChecksum {
 
     fun checksum(field: String): Long {
         val digest =
-            MessageDigest.getInstance("SHA-1").digest(stripHtmlPreservingMediaFilenames(field).toByteArray(Charsets.UTF_8))
+            MessageDigest.getInstance("SHA-1")
+                .digest(stripHtmlPreservingMediaFilenames(field).toByteArray(Charsets.UTF_8))
         return digest.take(4).fold(0L) { value, byte -> (value shl 8) or (byte.toLong() and 0xff) }
     }
 

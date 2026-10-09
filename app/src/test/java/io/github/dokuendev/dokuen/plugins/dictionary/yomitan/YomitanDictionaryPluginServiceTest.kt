@@ -1158,7 +1158,7 @@ class YomitanDictionaryPluginServiceTest {
             val payload = linkSpan.style.linkUrl!!.removePrefix("action:")
 
             try {
-                service.onExecuteCustomAction(payload)
+                service.executeAction(payload)
                 fail("Expected DictionaryException")
             } catch (e: DictionaryException) {
                 assertTrue(e.message?.contains("AnkiDroid") == true)
@@ -1174,7 +1174,7 @@ class YomitanDictionaryPluginServiceTest {
             service.onInitialize(config)
 
             try {
-                service.onExecuteCustomAction("anki_add?token=nonexistent&format=0")
+                service.executeAction("anki_add?token=nonexistent&format=0")
                 fail("Expected DictionaryException")
             } catch (e: DictionaryException) {
                 assertTrue(e.message?.contains("expired") == true)

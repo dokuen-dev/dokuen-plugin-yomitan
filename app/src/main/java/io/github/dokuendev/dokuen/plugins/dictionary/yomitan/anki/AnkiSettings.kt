@@ -28,6 +28,14 @@ enum class AnkiFieldOverwriteMode { SKIP, PREPEND, APPEND, COALESCE, COALESCE_NE
 @Serializable
 enum class AnkiCardIcon { BIG_CIRCLE, SMALL_CIRCLE, SQUARE, DIAMOND }
 
+/** What the `{screenshot}` marker asks the host for: the whole screenshot, or the crop UI. */
+@Serializable
+enum class AnkiScreenshotBehavior { FULL_SCREEN, CROP }
+
+/** How `{screenshot}` images are encoded, as the original's screenshot format. */
+@Serializable
+enum class AnkiScreenshotFormat { PNG, JPEG }
+
 @Serializable
 data class AnkiField(
     val value: String = "",
@@ -56,9 +64,8 @@ data class AnkiCardFormat(
  * - Suspend new cards / force Anki sync on adding a card: AddContentApi exposes no method
  *   for suspending cards or forcing a sync (confirmed against the AnkiDroid API's shipped
  *   sources), a genuine API-surface gap rather than a tradeoff.
- * - Screenshot format/quality, audio download timeout: not yet applicable since the
- *   {screenshot} and {audio} template markers themselves have no real implementation yet
- *   (see docs/anki-export.md), so revisit if/when those markers ship.
+ * - Audio download timeout: not yet applicable since the {audio} template marker has no real
+ *   implementation yet (see docs/anki-export.md), so revisit if/when it ships.
  *
  * Showing existing-note tags/flags before the user taps "Add" is also deliberately not
  * implemented: it would need one AnkiDroid ContentProvider round-trip per configured card
@@ -81,5 +88,9 @@ data class AnkiSettings(
     val checkForDuplicates: Boolean = true,
     val duplicateScope: AnkiDuplicateScope = AnkiDuplicateScope.COLLECTION,
     val duplicateScopeCheckAllModels: Boolean = false,
-    val duplicateBehavior: AnkiDuplicateBehavior = AnkiDuplicateBehavior.ALWAYS_ADD
+    val duplicateBehavior: AnkiDuplicateBehavior = AnkiDuplicateBehavior.ALWAYS_ADD,
+    val screenshotBehavior: AnkiScreenshotBehavior = AnkiScreenshotBehavior.FULL_SCREEN,
+    val screenshotFormat: AnkiScreenshotFormat = AnkiScreenshotFormat.PNG,
+    /** JPEG quality, 0 to 100; unused for PNG. */
+    val screenshotQuality: Int = 92
 )

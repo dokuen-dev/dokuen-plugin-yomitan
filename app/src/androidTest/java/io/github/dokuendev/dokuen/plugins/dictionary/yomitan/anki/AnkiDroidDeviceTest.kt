@@ -1,5 +1,7 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki
 
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -11,6 +13,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -283,6 +286,18 @@ class AnkiDroidDeviceTest {
         assertTrue(render("{kunyomi}"), "た.べる" in render("{kunyomi}"))
         assertTrue(render("{glossary}"), "eat" in render("{glossary}"))
         assertEquals(dictionary.title, render("{dictionary}"))
+    }
+
+    @Test
+    fun addImageStoresAMediaFileANoteCanReference() {
+        val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+        val stored = client.addImage(
+            AnkiMediaFileNames.generate("dokuen_plugin_test", ".png", System.currentTimeMillis())
+        ) { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
+
+        assertNotNull(stored)
+        assertTrue(stored!!.startsWith("dokuen_plugin_test_"))
+        assertTrue(stored.endsWith(".png"))
     }
 
     private companion object {

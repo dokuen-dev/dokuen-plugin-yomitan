@@ -108,4 +108,46 @@ class AnkiSettingsStoreTest {
 
         assertEquals(AnkiSettingsStore.defaults(app), loaded)
     }
+
+    @Test
+    fun testImageSettingsDefaultToTheOriginals() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+        val loaded = AnkiSettingsStore.load(app)
+
+        assertEquals(AnkiScreenshotBehavior.FULL_SCREEN, loaded.screenshotBehavior)
+        assertEquals(AnkiScreenshotFormat.PNG, loaded.screenshotFormat)
+        assertEquals(92, loaded.screenshotQuality)
+    }
+
+    @Test
+    fun testImageSettingsRoundTrip() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        val settings = AnkiSettingsStore.defaults(app).copy(
+            screenshotBehavior = AnkiScreenshotBehavior.CROP,
+            screenshotFormat = AnkiScreenshotFormat.JPEG,
+            screenshotQuality = 70
+        )
+
+        AnkiSettingsStore.save(app, settings)
+
+        assertEquals(settings, AnkiSettingsStore.load(app))
+    }
+
+    @Test
+    fun testSettingsSavedBeforeImageSettingsKeepTheirFormats() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        val older = """{"enabled":true,"cardFormats":[{"name":"Mine","type":"TERM","deckId":1,""" +
+                """"deckName":"D","modelId":2,"modelName":"M"}],"tags":["t"]}"""
+        app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE).edit()
+            .putString("anki_settings", older).commit()
+
+        val loaded = AnkiSettingsStore.load(app)
+
+        assertEquals(listOf("Mine"), loaded.cardFormats.map { it.name })
+        assertEquals(AnkiScreenshotBehavior.FULL_SCREEN, loaded.screenshotBehavior)
+        assertEquals(AnkiScreenshotFormat.PNG, loaded.screenshotFormat)
+        assertEquals(92, loaded.screenshotQuality)
+    }
 }

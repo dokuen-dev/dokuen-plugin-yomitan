@@ -53,9 +53,11 @@ Already installed (this plan does not cover installing them): on desktop, Anki w
 add-on, Python 3, `adb`, a checkout of this repository with what its README lists for building it,
 and a browser with Yomitan (scanning with **Shift**, its default) and the five dictionaries of R3
 imported; on Android, AnkiDroid (from the Play Store, first-run
-setup done), the host app (`dokuen-android`), and this plugin with the five dictionaries of R3
-imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled, and no sort dictionary
-chosen.
+setup done), the host app (`dokuen-android`) with Dokuen Pro, and this plugin with the five
+dictionaries of R3 imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled, and
+no sort dictionary chosen. Dokuen Pro is needed because `AuditTerm` has `screenshot` and
+`clipboard-image` fields: without it, every add shows a message that images need Dokuen Pro instead
+of relabeling the link, as the steps expect.
 
 - [ ] **1.1** Desktop: start Anki.
 - [ ] **1.2** Desktop: in Yomitan's settings, **Backup** → **Export settings**. Note where the file is saved.
@@ -66,7 +68,7 @@ chosen.
 
 - [ ] **2.1** In the repository checkout, run `python scripts/anki_test_plan.py setup --yomitan-settings <the file from 1.2>`. If it reports notes left in `AuditTest` by an earlier run, run it again with `--clean` added, which deletes them on both platforms.
 - [ ] **2.2** Confirm it prints **Setup complete**. If it prints **Setup found problems** instead, fix each problem it lists and run it again.
-- [ ] **2.3** Leave it running until the end of Phase 12. It serves the test page (R5) that every lookup scans, and has opened it in the desktop browser and in Chrome on the device. (If you stop and resume another day, `python scripts/anki_test_plan.py serve` serves it again.)
+- [ ] **2.3** Leave it running until the end of Phase 13. It serves the test page (R5) that every lookup scans, and has opened it in the desktop browser and in Chrome on the device. (If you stop and resume another day, `python scripts/anki_test_plan.py serve` serves it again.)
 
 ## Phase 3: Plugin defaults, AnkiDroid and permissions (Android)
 
@@ -260,11 +262,31 @@ prevented).
 - [ ] **12.4** AnkiDroid: delete the `AuditTest::Sub` deck. Plugin: scan `手紙` and tap **Add: AuditSub**. Confirm a message that `AuditSub`'s deck `AuditTest::Sub` no longer exists. In AnkiDroid, search `手紙` and confirm it still finds exactly 1 note (the one from 9.20), so none was added.
 - [ ] **12.5** AnkiDroid: create the deck `AuditTest::Sub` again. Plugin: hide Dokuen's overlay, and choose the deck again as `AuditSub`'s deck.
 - [ ] **12.6** Desktop: close Anki. Scan `食べる` and click **AuditVocab**. Write down the error desktop shows, and confirm its general shape (not its wording) is like the plugin's error messages in 12.3 and 12.4.
-- [ ] **12.7** Desktop: in the setup script's window, press **Enter** to stop serving the test page.
 
-## Phase 13: Finish (Android)
+## Phase 13: Images and clipboard text (Android)
 
-- [ ] **13.1** Plugin: delete card formats until exactly one is left. Confirm the delete control is disabled for the last one.
+All on Android. Every add here is 猫【ねこ】 via `AuditVocab`, whose `screenshot`, `clipboard-image`,
+and `clipboard-text` fields hold those markers; with **Allow adding** (9.22, 11.7) each add makes a
+new note. To look at the newest note's fields, search `猫` in AnkiDroid's card browser and open the
+last note in its note editor. The image settings are in the plugin's **Anki Export** tab, **Images**
+card; hide Dokuen's overlay to change them, as for every plugin setting.
+
+- [ ] **13.1** Plugin: confirm the **Images** card shows "{screenshot} behavior" **Full screen** and image format **PNG**, with no JPEG quality slider. In any app, copy some text (not an image). Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears and the link reads **Added: AuditVocab**. In AnkiDroid, confirm the new note's `screenshot` field shows the whole screen Dokuen scanned and its `clipboard-image` field is empty.
+- [ ] **13.2** Plugin: set "{screenshot} behavior" to **Show crop UI**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm Dokuen's crop UI opens, titled with the plugin's name. Crop to a part of the screen and confirm. In AnkiDroid, confirm the new note's `screenshot` field shows just that part.
+- [ ] **13.3** Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, choose an image file instead. In AnkiDroid, confirm the new note's `screenshot` field shows that file's image.
+- [ ] **13.4** Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, continue without an image. Confirm the link reads **Added: AuditVocab**, and in AnkiDroid that the new note's `screenshot` field is empty.
+- [ ] **13.5** In AnkiDroid, count the `猫` notes. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, cancel. Confirm, in AnkiDroid, that the number of `猫` notes is unchanged.
+- [ ] **13.6** Plugin: set "{screenshot} behavior" to **Full screen**, image format **JPEG**, and JPEG quality **50**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `screenshot` field shows a `.jpg` file (the note editor's HTML view shows the file name; AnkiDroid stores JPEG as `.jpg`) that looks visibly compressed. Set the image format back to **PNG**.
+- [ ] **13.7** Copy an image (for example, in Chrome, long-press an image and choose **Copy image**). Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-image` field shows that image, as a `.png` file, and that its `clipboard-text` field is empty. Plugin: set the image format to **JPEG**, scan `猫` and add 猫【ねこ】 via `AuditVocab` again, and confirm the new `clipboard-image` file is still `.png`. Set the image format back to **PNG**.
+- [ ] **13.8** In a text editor app (for example Google Keep), type the two lines `<b>bold</b>` and `second line`, select both, and copy them. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-text` field shows both lines, one below the other, with `<b>bold</b>` shown as typed rather than in bold, and that its `clipboard-image` field is empty.
+- [ ] **13.9** Plugin: set "{screenshot} behavior" to **Show crop UI** and "When a duplicate is detected" to **Prevent adding**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm "This note already exists in Anki." and that no crop UI appeared.
+- [ ] **13.10** Plugin: set **Allow overwriting**, and in `AuditVocab`, set the `screenshot` field's overwrite mode to **Skip**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no crop UI appears and the link reads **Overwritten: AuditVocab**. In AnkiDroid, confirm the first `猫` note (the one from 13.1) still shows its screenshot.
+- [ ] **13.11** If a Dokuen account or build without Dokuen Pro is available, switch to it (otherwise skip this step). Plugin: set **Allow adding** and "{screenshot} behavior" **Full screen**. Copy some text. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears and the message says the note was added without images because images from Dokuen require Dokuen Pro. In AnkiDroid, confirm the new note's `screenshot` and `clipboard-image` fields are empty and its `clipboard-text` field holds the copied text. Switch back to Dokuen Pro.
+- [ ] **13.12** Desktop: in the setup script's window, press **Enter** to stop serving the test page.
+
+## Phase 14: Finish (Android)
+
+- [ ] **14.1** Plugin: delete card formats until exactly one is left. Confirm the delete control is disabled for the last one.
 
 ---
 
@@ -431,7 +453,7 @@ in large text:
    雨が降っていた。電車が動き出す前に座った。窓の外は暗かった。
    ```
 
-3. The words only Phases 9, 11, and 12 scan, in the same way: `椅子。`, `鉛筆。`, `手紙。`, `猫。`,
+3. The words only Phases 9, 11, 12, and 13 scan, in the same way: `椅子。`, `鉛筆。`, `手紙。`, `猫。`,
    `犬。`, `かける。`.
 
 Both platforms cut the text around the match at the nearest sentence terminator (`。`) or line
@@ -467,7 +489,7 @@ session is restarted after the check (10.3).
 5. Resets the plugin's Anki settings to the defaults, so that Phase 3 starts from them and Phase 5 from the three default formats.
 6. Checks the plugin's dictionaries: the five of R3, at exactly those revisions, enabled in exactly that order, nothing else enabled, and no sort dictionary.
 7. Writes `yomitan-settings-anki-test-plan.json`: the settings exported in 1.2, with desktop's dictionaries set up the same way (the five enabled in order, every other one disabled), frequency sorting off, duplicate checking on with scope Collection, not across models, and "Allow adding", and the 5 card formats of R2. It is imported in 4.1.
-8. Serves the test page (R5) and opens it in the desktop browser and in Chrome on the device, until Enter is pressed (12.7).
+8. Serves the test page (R5) and opens it in the desktop browser and in Chrome on the device, until Enter is pressed (13.12).
 
 **Check** (Phase 10) reads the plugin's stored Anki settings and every note in `AuditTest` (and its
 sub-deck) from both platforms, and makes every check of R8, reporting each under its ID with one
@@ -512,7 +534,7 @@ exactly:
 | Check duplicates across all models | toggle, shown when duplicates on | same | |
 | Duplicate card scope | Collection / Deck / Deck root | same | The plugin runs a real deck-scoped search. |
 | When a duplicate is detected | Prevent adding / Allow overwriting / Allow adding | same | |
-| Screenshot format / quality | advanced | absent | There is no `{screenshot}` content yet. |
+| Screenshot format / quality | advanced | Anki Export tab, **Images** card, with "{screenshot} behavior" | As in the original, they do not apply to `{clipboard-image}`, which is PNG. "{screenshot} behavior" chooses between the whole screen Dokuen scanned and Dokuen's crop UI; desktop has no such choice and never prompts. |
 | Idle download timeout | advanced | absent | There is no `{audio}` content yet. |
 | Suspend new cards | advanced toggle | absent | AnkiDroid's API has no equivalent. |
 | Note viewer window (Browse/Edit) | select, and a "View added note" button after an add | absent: no link to a note | AnkiDroid has no API for opening its note editor, and on Android 14 and later a plugin cannot open AnkiDroid's card browser either (see `anki-export.md`). |
@@ -566,8 +588,9 @@ says otherwise; the checks also give the exact value wherever it is known in adv
 | C2.18 | `search-query` | T1 | `食べる` on both. |
 | C2.19 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix`, `cloze-body-kana` | T1 to T7 | Identical on both; the exact values are C4.4. |
 | C2.20 | `sentence-furigana`, `sentence-furigana-plain` | all | On the plugin, each is exactly the note's own `sentence` field (empty when that is empty). Desktop's carries readings (`<ruby>` in `sentence-furigana`, `word[reading]` text in `sentence-furigana-plain`): the known deferral (see "Sentence furigana is not implemented" under Known limitations in `anki-export.md`), not a finding. |
-| C2.21 | `audio`, `screenshot`, `clipboard-image`, `clipboard-text`, `popup-selection-text`, `url`, `document-title`, `phonetic-transcriptions`, `pitch-accents`, `pitch-accent-graphs`, `pitch-accent-graphs-jj`, `pitch-accent-positions`, `pitch-accent-categories` | all | Empty on the plugin: the markers have no backing subsystem yet, a documented scope boundary. Desktop may fill some of them, depending on its own state (clipboard contents, configured audio sources), so desktop's values are recorded, not compared. |
+| C2.21 | `audio`, `popup-selection-text`, `url`, `document-title`, `phonetic-transcriptions`, `pitch-accents`, `pitch-accent-graphs`, `pitch-accent-graphs-jj`, `pitch-accent-positions`, `pitch-accent-categories` | all | Empty on the plugin: the markers have no backing subsystem yet, a documented scope boundary. Desktop may fill some of them, depending on its own state (configured audio sources), so desktop's values are recorded, not compared. |
 | C2.22 | every other field | all | Identical on both. |
+| C2.23 | `screenshot`, `clipboard-image`, `clipboard-text` | all | Recorded on both, not compared: each platform fills them from its own screen and clipboard when the note is added. Phase 13 checks them by hand. |
 
 ### C3. Furigana
 
@@ -668,9 +691,10 @@ example `#565656` becomes `rgb(86, 86, 86)`) and normalizes whitespace, and the 
 ## R9. Known exceptions, and what the plan does not cover
 
 Every field written by this feature should match desktop exactly, with these known, accepted
-exceptions: the markers that still resolve to empty (audio, screenshot, clipboard, pitch accents,
-phonetic transcriptions, page context), sentence furigana, `part-of-speech`, the conjugation names
-in `conjugation` (C2.9), glossary images (the plugin stores no media, C7.5), and the value spelling
+exceptions: the markers that still resolve to empty (audio, pitch accents, phonetic
+transcriptions, page context), the screenshot and clipboard fields (C2.23), sentence furigana,
+`part-of-speech`, the conjugation names in `conjugation` (C2.9), glossary images (the plugin stores
+no dictionary media, C7.5), and the value spelling
 and whitespace of the CSS in the glossary's `<style>` elements (C7). Any other difference is a new finding.
 
 The pinned dictionaries don't exercise these converter cases, so this plan does not check them:

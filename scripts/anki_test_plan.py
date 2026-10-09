@@ -104,7 +104,7 @@ DICTIONARIES = [
 ]
 # The test page (R5): every word the plan scans, each on a line of its own that ends with a
 # sentence terminator, so that both platforms cut the sentence at the line; then the paragraph T8
-# and K2 are scanned from; then the words only Phases 9, 11, and 12 scan.
+# and K2 are scanned from; then the words only Phases 9, 11, 12, and 13 scan.
 PAGE_WORDS = ['食べる', '動き出す', 'お見舞い', '食べさせられた', '牛', '京都', '学習辞典', '時雨', '鳥居',
               '千鳥', '順路', '記号', '學校']
 TEST_PARAGRAPH = '雨が降っていた。電車が動き出す前に座った。窓の外は暗かった。'
@@ -193,10 +193,12 @@ KANJI_SENTENCES = {
 SENTENCE_FIELDS = ['sentence', 'cloze-prefix', 'cloze-body', 'cloze-suffix', 'cloze-body-kana']
 SENTENCE_FURIGANA_FIELDS = ['sentence-furigana', 'sentence-furigana-plain']
 STUB_FIELDS = [
-    'audio', 'screenshot', 'clipboard-image', 'clipboard-text', 'popup-selection-text', 'url',
-    'document-title', 'phonetic-transcriptions', 'pitch-accents', 'pitch-accent-graphs',
-    'pitch-accent-graphs-jj', 'pitch-accent-positions', 'pitch-accent-categories',
+    'audio', 'popup-selection-text', 'url', 'document-title', 'phonetic-transcriptions', 'pitch-accents',
+    'pitch-accent-graphs', 'pitch-accent-graphs-jj', 'pitch-accent-positions', 'pitch-accent-categories',
 ]
+# Filled on each platform from its own screen and clipboard when the note is added, so recorded,
+# not compared (C2.23).
+HOST_MEDIA_FIELDS = ['screenshot', 'clipboard-image', 'clipboard-text']
 STYLED_FIELDS = ['Glossary', 'glossary-brief', 'glossary-no-dictionary']
 STYLED_FIRST_FIELDS = ['glossary-first', 'glossary-first-brief', 'glossary-first-no-dictionary']
 FREQUENCY_RANK_FIELDS = ['frequency-harmonic-rank', 'frequency-average-rank']
@@ -572,7 +574,7 @@ def compare_styled(report, step, label, field, d_value, p_value):
                                field, index + 1), d_css, p_css)
     d_images, p_images = IMAGE_PATTERN.findall(d_body), IMAGE_PATTERN.findall(p_body)
     if d_images != p_images:
-        report.add(step, 'RECORD', label, '%s images differ (known gap: the plugin stores no media)' % field,
+        report.add(step, 'RECORD', label, '%s images differ (known gap: the plugin stores no dictionary media)' % field,
                    '\n\n'.join(d_images), '\n\n'.join(p_images))
     return status
 
@@ -623,6 +625,8 @@ def check_term_notes(report, desktop, plugin):
             elif field == 'conjugation' and label == 'T4':
                 rule = 'plugin exact; desktop recorded'
                 status = 'PASS' if p_value == T4_CONJUGATION else 'FAIL'
+            elif field in HOST_MEDIA_FIELDS:
+                rule, status = 'recorded on both', 'RECORD'
             elif field in STUB_FIELDS:
                 rule = 'plugin empty; desktop recorded'
                 status = 'PASS' if p_value == '' else 'FAIL'
@@ -1159,7 +1163,7 @@ def command_serve(args, folder):
                                     '-p', 'com.android.chrome'])
     webbrowser.open(url)
     print('Opened %s in the desktop browser and in Chrome on the device.' % url)
-    print('Leave this running until Phase 12 is done (every lookup scans this page), then press Enter.')
+    print('Leave this running until Phase 13 is done (every lookup scans this page), then press Enter.')
     try:
         input()
     except (EOFError, KeyboardInterrupt):

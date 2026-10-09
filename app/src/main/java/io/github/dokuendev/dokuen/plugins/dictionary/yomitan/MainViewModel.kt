@@ -13,6 +13,8 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateB
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateScope
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldDefaults
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
@@ -697,6 +699,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAnkiDuplicateBehavior(behavior: AnkiDuplicateBehavior) {
         persistAnkiSettings(_uiState.value.ankiSettings.copy(duplicateBehavior = behavior))
+    }
+
+    fun setAnkiScreenshotBehavior(behavior: AnkiScreenshotBehavior) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(screenshotBehavior = behavior))
+    }
+
+    fun setAnkiScreenshotFormat(format: AnkiScreenshotFormat) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(screenshotFormat = format))
+    }
+
+    fun setAnkiScreenshotQuality(quality: Int) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(screenshotQuality = quality.coerceIn(0, 100)))
     }
 
     fun addAnkiCardFormat(format: AnkiCardFormat) {

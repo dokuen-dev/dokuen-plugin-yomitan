@@ -2,12 +2,19 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki
 
 import android.app.Application
 import android.content.ContentResolver
+import android.content.ContentValues
+import android.content.Context
+import android.content.ContextWrapper
 import android.database.Cursor
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -16,8 +23,11 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
+import java.io.File
 import org.mockito.kotlin.mock as kmock
 
 @RunWith(RobolectricTestRunner::class)
@@ -203,5 +213,101 @@ class AnkiDroidClientTest {
         assertEquals(42L, duplicates[0].modelId)
         assertEquals(listOf("食べる", "to eat"), duplicates[0].fields)
         assertEquals(setOf("dokuen", "vocab"), duplicates[0].tags)
+    }
+
+    /** Records the URI grants addImage makes and revokes. */
+    private class GrantRecordingContext(base: Context) : ContextWrapper(base) {
+        val granted = mutableListOf<Uri>()
+        val revoked = mutableListOf<Uri>()
+
+        override fun grantUriPermission(toPackage: String?, uri: Uri, modeFlags: Int) {
+            granted += uri
+        }
+
+        override fun revokeUriPermission(uri: Uri, modeFlags: Int) {
+            revoked += uri
+        }
+    }
+
+    private fun mediaFile(context: Context) = File(File(context.cacheDir, "anki_media"), "shot.png")
+
+    // FileProvider.getUriForFile rejects Windows paths, so tests supply the URI themselves.
+    private fun fakeMediaUri(file: File): Uri = Uri.parse("content://test.fileprovider/anki_media/${file.name}")
+
+    @Test
+    fun addImageInsertsTheWrittenFileAndReturnsTheStoredName() {
+        val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
+        val resolver = mock(ContentResolver::class.java)
+        val valuesCaptor = argumentCaptor<ContentValues>()
+        var contentAtInsert: ByteArray? = null
+        whenever(resolver.insert(eq(FlashCardsContract.AnkiMedia.CONTENT_URI), valuesCaptor.capture())).thenAnswer {
+            contentAtInsert = mediaFile(context).readBytes()
+            Uri.parse("content://com.ichi2.anki.flashcards/media/shot_1.png")
+        }
+        val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
+
+        val stored = client.addImage("shot.png") { out ->
+            out.write(byteArrayOf(1, 2, 3))
+            true
+        }
+
+        assertEquals("shot_1.png", stored)
+        assertEquals(listOf<Byte>(1, 2, 3), contentAtInsert?.toList())
+        val values = valuesCaptor.firstValue
+        assertEquals("shot", values.getAsString(FlashCardsContract.AnkiMedia.PREFERRED_NAME))
+        assertEquals(
+            "content://test.fileprovider/anki_media/shot.png",
+            values.getAsString(FlashCardsContract.AnkiMedia.FILE_URI)
+        )
+        assertFalse(mediaFile(context).exists())
+    }
+
+    @Test
+    fun addImageRevokesTheGrantItMade() {
+        val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
+        val resolver = mock(ContentResolver::class.java)
+        whenever(resolver.insert(any(), any())).thenReturn(Uri.parse("content://com.ichi2.anki.flashcards/media/x.png"))
+        val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
+
+        client.addImage("shot.png") { true }
+
+        assertEquals(listOf(Uri.parse("content://test.fileprovider/anki_media/shot.png")), context.granted)
+        assertEquals(context.granted, context.revoked)
+    }
+
+    @Test
+    fun addImageReturnsNullWhenAnkiDroidRefuses() {
+        val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
+        val resolver = mock(ContentResolver::class.java)
+        whenever(resolver.insert(any(), any())).thenReturn(null)
+        val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
+
+        assertNull(client.addImage("shot.png") { true })
+        assertEquals(context.granted, context.revoked)
+        assertFalse(mediaFile(context).exists())
+    }
+
+    @Test
+    fun addImageInsertsNothingWhenTheWriterFails() {
+        val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
+        val resolver = mock(ContentResolver::class.java)
+        val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
+
+        assertNull(client.addImage("shot.png") { false })
+        verify(resolver, never()).insert(any(), any())
+        assertTrue(context.granted.isEmpty())
+        assertFalse(mediaFile(context).exists())
+    }
+
+    @Test
+    fun addImageDeletesTheFileAndRevokesTheGrantWhenInsertThrows() {
+        val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
+        val resolver = mock(ContentResolver::class.java)
+        whenever(resolver.insert(any(), any())).thenThrow(SecurityException("no access"))
+        val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
+
+        assertThrows(SecurityException::class.java) { client.addImage("shot.png") { true } }
+        assertEquals(1, context.revoked.size)
+        assertFalse(mediaFile(context).exists())
     }
 }

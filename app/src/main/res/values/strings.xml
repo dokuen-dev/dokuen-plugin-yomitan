@@ -94,12 +94,23 @@
     <string name="anki_card_format_first_field_needs_marker">The first field must contain a marker.</string>
     <string name="anki_export_permission_denied">Anki export needs AnkiDroid access to add cards.</string>
     <string name="anki_card_format_limit_reached">You can have up to 5 card formats.</string>
-    <string name="anki_export_enabled_snackbar">Anki export enabled</string>
+    <string name="anki_images_title">Images</string>
+    <string name="anki_images_requires_pro">(Requires Dokuen Pro)</string>
+    <string name="anki_screenshot_behavior_label">{screenshot} behavior</string>
+    <string name="anki_screenshot_behavior_full_screen">Full screen</string>
+    <string name="anki_screenshot_behavior_crop">Show crop UI</string>
+    <string name="anki_screenshot_format_label">Image format</string>
+    <string name="anki_screenshot_quality_label">JPEG quality: %1$d</string>
     <string name="anki_note_added">Note added to Anki.</string>
     <string name="anki_note_updated">Note updated in Anki.</string>
     <string name="error_anki_export_disabled">Anki export is turned off in the plugin settings.</string>
     <string name="anki_note_added_unknown_markers">Note added to Anki, but card format \"%1$s\" uses unknown marker(s): %2$s</string>
     <string name="anki_note_updated_unknown_markers">Note updated in Anki, but card format \"%1$s\" uses unknown marker(s): %2$s</string>
+    <string name="anki_note_not_added">Note not added.</string>
+    <string name="anki_note_added_media_failed">Note added to Anki, but AnkiDroid did not accept the image for: %1$s</string>
+    <string name="anki_note_updated_media_failed">Note updated in Anki, but AnkiDroid did not accept the image for: %1$s</string>
+    <string name="anki_note_added_images_denied">Note added to Anki without images: images from Dokuen require Dokuen Pro.</string>
+    <string name="anki_note_updated_images_denied">Note updated in Anki without new images: images from Dokuen require Dokuen Pro.</string>
     <string name="anki_note_already_exists">This note already exists in Anki.</string>
 
     <!-- Plural for stats badge -->

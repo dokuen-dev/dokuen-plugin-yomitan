@@ -25,11 +25,11 @@ object AnkiTemplateEngine {
     private const val OCCURRENCE_BASED = "occurrence-based"
 
     /**
-     * Standard markers whose backing subsystem (audio, screenshots, clipboard, pitch accent
-     * data, browser page context) does not exist in this port.
+     * Standard markers whose backing subsystem (audio, pitch accent data, browser page
+     * context) does not exist in this port.
      */
     private val stubMarkers: Set<String> = setOf(
-        "audio", "screenshot", "clipboard-image", "clipboard-text",
+        "audio",
         "pitch-accents", "pitch-accent-graphs", "pitch-accent-graphs-jj",
         "pitch-accent-positions", "pitch-accent-categories",
         "phonetic-transcriptions", "popup-selection-text",
@@ -53,6 +53,13 @@ object AnkiTemplateEngine {
             d.onyomi.joinToString(", ") { escape(AnkiJapanese.convertKatakanaToHiragana(it)) }
         },
         "stroke-count" to { d -> "Stroke count: " + (d.strokeCount?.let { escape(it) } ?: "Unknown") },
+        // The original's `screenshot` and `clipboard-image` partials: an <img> around the
+        // stored media file's name, or nothing when there is no image.
+        "screenshot" to { d -> d.screenshotFileName?.let { imageTag(it) } ?: "" },
+        "clipboard-image" to { d -> d.clipboardImageFileName?.let { imageTag(it) } ?: "" },
+        // The original's `clipboard-text` partial, `{{{getMedia "clipboardText"}}}`: getMedia
+        // escapes the value and turns each line break into `<br>` plus the line break.
+        "clipboard-text" to { d -> d.clipboardText?.let { escape(it).replace("\n", "<br>\n") } ?: "" },
         "sentence" to { d -> d.cloze?.sentence ?: "" },
         // No furigana source is available yet (see docs/anki-export.md), so these print the
         // plain sentence, which is what the original's partials print when their furigana
@@ -104,6 +111,12 @@ object AnkiTemplateEngine {
         }
         return FieldRenderResult(text, unknown)
     }
+
+    /**
+     * The original's `<img src="{{getMedia ...}}" />`: getMedia returns the escaped name as a
+     * plain string, which the double-brace output escapes a second time.
+     */
+    private fun imageTag(fileName: String): String = "<img src=\"${escape(escape(fileName))}\" />"
 
     /** Handlebars' escapeExpression, applied by the original to every `{{value}}` output. */
     internal fun escape(text: String): String {

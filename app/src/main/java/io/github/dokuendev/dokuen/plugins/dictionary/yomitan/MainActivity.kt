@@ -1188,17 +1188,6 @@ fun AnkiExportPage(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val navigationBarBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val ankiExportEnabledMessage = stringResource(R.string.anki_export_enabled_snackbar)
-
-    // Bumped whenever previously-hidden content (the expanded Anki settings, or the Card
-    // Formats card) becomes visible as a direct result of a user action, so the list
-    // scrolls down far enough to actually show it.
-    var revealScrollTrigger by remember { mutableIntStateOf(0) }
-    LaunchedEffect(revealScrollTrigger) {
-        if (revealScrollTrigger > 0) {
-            listState.animateScrollToItem(maxOf(0, listState.layoutInfo.totalItemsCount - 1))
-        }
-    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -1237,13 +1226,7 @@ fun AnkiExportPage(
                 onDuplicateBehaviorChange = viewModel::setAnkiDuplicateBehavior,
                 onDuplicateScopeChange = viewModel::setAnkiDuplicateScope,
                 onDuplicateScopeCheckAllModelsChange = viewModel::setAnkiDuplicateScopeCheckAllModels,
-                onRefreshConnection = viewModel::refreshAnkiStatus,
-                onConnected = {
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(ankiExportEnabledMessage)
-                    }
-                    revealScrollTrigger++
-                }
+                onRefreshConnection = viewModel::refreshAnkiStatus
             )
         }
         if (uiState.ankiSettings.enabled && uiState.ankiDroidInstalled && uiState.ankiDroidPermissionGranted) {
@@ -1262,6 +1245,16 @@ fun AnkiExportPage(
                     onLimitReached = {
                         coroutineScope.launch { snackbarHostState.showSnackbar(limitReachedMessage) }
                     }
+                )
+            }
+            item {
+                AnkiImageSettingsCard(
+                    screenshotBehavior = uiState.ankiSettings.screenshotBehavior,
+                    screenshotFormat = uiState.ankiSettings.screenshotFormat,
+                    screenshotQuality = uiState.ankiSettings.screenshotQuality,
+                    onScreenshotBehaviorChange = viewModel::setAnkiScreenshotBehavior,
+                    onScreenshotFormatChange = viewModel::setAnkiScreenshotFormat,
+                    onScreenshotQualityChange = viewModel::setAnkiScreenshotQuality
                 )
             }
         }
@@ -2084,8 +2077,7 @@ fun AnkiExportGeneralSettingsCard(
     onDuplicateBehaviorChange: (AnkiDuplicateBehavior) -> Unit,
     onDuplicateScopeChange: (AnkiDuplicateScope) -> Unit,
     onDuplicateScopeCheckAllModelsChange: (Boolean) -> Unit,
-    onRefreshConnection: () -> Unit,
-    onConnected: () -> Unit
+    onRefreshConnection: () -> Unit
 ) {
     var duplicateBehaviorMenuExpanded by remember { mutableStateOf(false) }
     var duplicateScopeMenuExpanded by remember { mutableStateOf(false) }
@@ -2115,7 +2107,6 @@ fun AnkiExportGeneralSettingsCard(
             permissionDenied = false
             permissionPermanentlyDenied = false
             onEnabledChange(true)
-            onConnected()
         } else {
             permissionDenied = true
             val activity = context as? android.app.Activity
@@ -2190,10 +2181,7 @@ fun AnkiExportGeneralSettingsCard(
                             when {
                                 !ankiDroidInstalled -> showInstallDialog = true
                                 !ankiDroidPermissionGranted -> showPermissionRationaleDialog = true
-                                else -> {
-                                    onEnabledChange(true)
-                                    onConnected()
-                                }
+                                else -> onEnabledChange(true)
                             }
                         } else {
                             onEnabledChange(false)

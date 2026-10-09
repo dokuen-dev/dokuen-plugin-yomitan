@@ -77,5 +77,11 @@ data class AnkiNoteData(
     val kunyomi: List<String> = emptyList(),
     val onyomi: List<String> = emptyList(),
     /** Kanji entries: the "strokes" stat value when the dictionary provides one. */
-    val strokeCount: String? = null
+    val strokeCount: String? = null,
+    /** The AnkiDroid media file name of the `{screenshot}` image, set per tap. */
+    val screenshotFileName: String? = null,
+    /** The AnkiDroid media file name of the `{clipboard-image}` image, set per tap. */
+    val clipboardImageFileName: String? = null,
+    /** The clipboard's text for `{clipboard-text}`, set per tap. */
+    val clipboardText: String? = null
 )

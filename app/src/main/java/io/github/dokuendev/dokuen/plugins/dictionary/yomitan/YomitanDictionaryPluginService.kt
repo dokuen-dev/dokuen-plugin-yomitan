@@ -1,5 +1,6 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
@@ -9,9 +10,13 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateB
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldMerger
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaFileNames
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaNeeds
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteData
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteDataBuilder
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteInfo
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSentenceExtractor
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
@@ -23,6 +28,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.parser.JapaneseDein
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.CssProcessor
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.renderer.YomitanRenderer
 import io.github.dokuendev.dokuenreader.dictionary.BlockSpan
+import io.github.dokuendev.dokuenreader.dictionary.CustomActionContext
 import io.github.dokuendev.dokuenreader.dictionary.CustomActionResult
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryEntry
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryErrorCode
@@ -30,6 +36,8 @@ import io.github.dokuendev.dokuenreader.dictionary.DictionaryException
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryPluginService
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryResult
 import io.github.dokuendev.dokuenreader.dictionary.HeadwordSpan
+import io.github.dokuendev.dokuenreader.dictionary.ImageRequestResult
+import io.github.dokuendev.dokuenreader.dictionary.ImageRequestSource
 import io.github.dokuendev.dokuenreader.dictionary.InlineStyle
 import io.github.dokuendev.dokuenreader.dictionary.RubySpan
 import io.github.dokuendev.dokuenreader.dictionary.StyledSpan
@@ -1501,10 +1509,13 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         return map
     }
 
-    override suspend fun onExecuteCustomAction(actionPayload: String): CustomActionResult {
+    override suspend fun onExecuteCustomAction(
+        actionPayload: String,
+        context: CustomActionContext
+    ): CustomActionResult {
         return when {
             actionPayload.startsWith("anki_add?") -> try {
-                executeAnkiAddAction(actionPayload)
+                executeAnkiAddAction(actionPayload, context)
             } catch (e: DictionaryException) {
                 throw e
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -1526,7 +1537,10 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         }
     }
 
-    private suspend fun executeAnkiAddAction(actionPayload: String): CustomActionResult {
+    private suspend fun executeAnkiAddAction(
+        actionPayload: String,
+        actionContext: CustomActionContext
+    ): CustomActionResult {
         val queryPart = actionPayload.removePrefix("anki_add?")
         val params = parseQueryParams("?$queryPart")
         val ref = parseAnkiAddLink(actionPayload)
@@ -1544,7 +1558,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
         // The snapshot only decides which format and duplicate rules apply; whether export is
         // allowed at all is always the live setting, so turning it off takes effect at once.
-        if (!AnkiSettingsStore.load(applicationContext).enabled) {
+        val liveSettings = AnkiSettingsStore.load(applicationContext)
+        if (!liveSettings.enabled) {
             throw DictionaryException(
                 DictionaryErrorCode.INTERNAL_ERROR,
                 getString(R.string.error_anki_export_disabled)
@@ -1606,6 +1621,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             AnkiLinkStatus.ADD_DUPLICATE
         }
 
+        // A note of the format's own note type to overwrite; null means a new note is added.
+        var existing: AnkiNoteInfo? = null
         if (duplicates.isNotEmpty()) {
             when (settings.duplicateBehavior) {
                 AnkiDuplicateBehavior.PREVENT -> {
@@ -1619,45 +1636,158 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                     // A duplicate search across all note types can return notes whose fields
                     // differ from this format's, and a positional merge would corrupt them, so
                     // only a note of the format's own note type is ever overwritten. Without
-                    // one, execution falls through and a new note is added.
-                    val existing = duplicates.firstOrNull { it.modelId == format.modelId }
-                    if (existing != null) {
-                        val mergedFields = fieldNames.mapIndexed { i, fieldName ->
-                            val overwriteMode =
-                                format.fields[fieldName]?.overwriteMode ?: AnkiFieldOverwriteMode.COALESCE
-                            AnkiFieldMerger.merge(existing.fields.getOrElse(i) { "" }, fieldValues[i], overwriteMode)
-                        }
-                        val updated = ankiDroidClient.updateNoteFields(existing.id, mergedFields)
-                        return if (updated) {
-                            finishAnkiWrite(
-                                ref,
-                                linkContext,
-                                formatIndex,
-                                added = false,
-                                statusAfterWrite,
-                                fieldNames,
-                                unknownMarkers
-                            )
-                        } else {
-                            throw DictionaryException(
-                                DictionaryErrorCode.INTERNAL_ERROR,
-                                getString(R.string.error_anki_update_failed)
-                            )
-                        }
-                    }
+                    // one, a new note is added.
+                    existing = duplicates.firstOrNull { it.modelId == format.modelId }
                 }
 
                 AnkiDuplicateBehavior.ALWAYS_ADD -> {
-                    // fall through to add below
+                    // add below
                 }
             }
         }
 
-        val noteId = ankiDroidClient.addNote(format.modelId, format.deckId, fieldValues, settings.tags.toSet())
-        return if (noteId != null) {
-            finishAnkiWrite(ref, linkContext, formatIndex, added = true, statusAfterWrite, fieldNames, unknownMarkers)
+        // Images are requested only now that it is known what the write keeps, and the fields
+        // above (including the duplicate key) were rendered without them. How images are
+        // obtained and encoded follows the live settings, not the link's snapshot.
+        val media = acquireAnkiMedia(actionContext, liveSettings, format, fieldNames, existing)
+            ?: return CustomActionResult.SuccessMessage(getString(R.string.anki_note_not_added))
+        val finalValues = if (media.isEmpty) {
+            fieldValues
         } else {
-            throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_add_failed))
+            val withMedia = noteData.copy(
+                screenshotFileName = media.screenshotFileName,
+                clipboardImageFileName = media.clipboardImageFileName,
+                clipboardText = media.clipboardText
+            )
+            fieldNames.map { fieldName ->
+                format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, withMedia).text } ?: ""
+            }
+        }
+
+        val toOverwrite = existing
+        if (toOverwrite != null) {
+            val mergedFields = fieldNames.mapIndexed { i, fieldName ->
+                val overwriteMode = format.fields[fieldName]?.overwriteMode ?: AnkiFieldOverwriteMode.COALESCE
+                AnkiFieldMerger.merge(toOverwrite.fields.getOrElse(i) { "" }, finalValues[i], overwriteMode)
+            }
+            if (!ankiDroidClient.updateNoteFields(toOverwrite.id, mergedFields)) {
+                throw DictionaryException(
+                    DictionaryErrorCode.INTERNAL_ERROR,
+                    getString(R.string.error_anki_update_failed)
+                )
+            }
+            return finishAnkiWrite(
+                ref, linkContext, formatIndex, added = false, statusAfterWrite, fieldNames, unknownMarkers,
+                media.failedMarkers, media.imagesDenied
+            )
+        }
+
+        ankiDroidClient.addNote(format.modelId, format.deckId, finalValues, settings.tags.toSet())
+            ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_add_failed))
+        return finishAnkiWrite(
+            ref, linkContext, formatIndex, added = true, statusAfterWrite, fieldNames, unknownMarkers,
+            media.failedMarkers, media.imagesDenied
+        )
+    }
+
+    /**
+     * The images a note write got: their AnkiDroid file names, the markers whose image could not
+     * be stored, whether the host denied images (the user has no Dokuen Pro), and the clipboard
+     * text.
+     */
+    private data class AnkiMedia(
+        val screenshotFileName: String? = null,
+        val clipboardImageFileName: String? = null,
+        val failedMarkers: List<String> = emptyList(),
+        val imagesDenied: Boolean = false,
+        val clipboardText: String? = null
+    ) {
+        val isEmpty: Boolean
+            get() = screenshotFileName == null && clipboardImageFileName == null && clipboardText == null
+    }
+
+    /**
+     * Requests from the host, and stores in AnkiDroid, the images the write will use (see
+     * AnkiMediaNeeds), the screenshot first. Returns null when the user cancelled, in which
+     * case nothing further is requested and nothing may be written. Once the host denies one
+     * image it would deny the rest, so no further image is requested. Then requests the clipboard
+     * text if the write uses it; the host does not gate text on Dokuen Pro, so this happens even
+     * when images were denied.
+     */
+    private suspend fun acquireAnkiMedia(
+        actionContext: CustomActionContext,
+        settings: AnkiSettings,
+        format: AnkiCardFormat,
+        fieldNames: List<String>,
+        existing: AnkiNoteInfo?
+    ): AnkiMedia? {
+        // One timestamp per note, as the original names all of a note's media at once.
+        val timestamp = System.currentTimeMillis()
+        var media = AnkiMedia()
+        val failed = mutableListOf<String>()
+        for (marker in AnkiMediaNeeds.IMAGE_MARKERS) {
+            if (media.imagesDenied) break
+            if (!AnkiMediaNeeds.isNeeded(marker, fieldNames, format.fields, existing)) continue
+            val isScreenshot = marker == AnkiMediaNeeds.SCREENSHOT
+            val source = if (isScreenshot) ImageRequestSource.SCREENSHOT else ImageRequestSource.CLIPBOARD
+            val interactive = isScreenshot && settings.screenshotBehavior == AnkiScreenshotBehavior.CROP
+            when (val result = actionContext.requestImage(source, interactive)) {
+                ImageRequestResult.Cancelled -> return null
+                ImageRequestResult.NoImage -> Unit
+                ImageRequestResult.Denied -> media = media.copy(imagesDenied = true)
+                is ImageRequestResult.Image -> {
+                    val fileName = try {
+                        storeAnkiImage(result.bitmap, isScreenshot, settings, timestamp)
+                    } finally {
+                        result.bitmap.recycle()
+                    }
+                    when {
+                        fileName == null -> failed += marker
+                        isScreenshot -> media = media.copy(screenshotFileName = fileName)
+                        else -> media = media.copy(clipboardImageFileName = fileName)
+                    }
+                }
+            }
+        }
+        if (AnkiMediaNeeds.isNeeded(AnkiMediaNeeds.CLIPBOARD_TEXT, fieldNames, format.fields, existing)) {
+            // The original reads the clipboard by pasting into a <textarea>, whose value has every
+            // CRLF and lone CR turned into LF.
+            val text = actionContext.requestClipboardText()?.replace("\r\n", "\n")?.replace('\r', '\n')
+            media = media.copy(clipboardText = text)
+        }
+        return media.copy(failedMarkers = failed)
+    }
+
+    /**
+     * Encodes [bitmap] and stores it in AnkiDroid, returning the stored name or null. A screenshot follows
+     * the image format setting. A clipboard image is always PNG: the original stores it in the
+     * clipboard's own format, and the clipboard image it reads (a pasted `data:` URL) is a PNG.
+     */
+    private fun storeAnkiImage(
+        bitmap: Bitmap,
+        isScreenshot: Boolean,
+        settings: AnkiSettings,
+        timestamp: Long
+    ): String? {
+        val format = if (isScreenshot) settings.screenshotFormat else AnkiScreenshotFormat.PNG
+        val (compressFormat, extension) = when (format) {
+            AnkiScreenshotFormat.PNG -> Bitmap.CompressFormat.PNG to ".png"
+            AnkiScreenshotFormat.JPEG -> Bitmap.CompressFormat.JPEG to ".jpeg"
+        }
+        // Bitmap.compress throws for a quality outside 0..100, which a hand-edited settings file
+        // could hold.
+        val quality = settings.screenshotQuality.coerceIn(0, 100)
+        // Not the original's "yomitan_browser_screenshot" / "yomitan_clipboard_image": the images
+        // come from Dokuen, not from a browser tab.
+        val prefix = if (isScreenshot) "dokuen_screenshot" else "dokuen_clipboard_image"
+        // Encoding happens inside the try too, so any failure only loses this image, not the note.
+        return try {
+            ankiDroidClient.addImage(AnkiMediaFileNames.generate(prefix, extension, timestamp)) { out ->
+                bitmap.compress(compressFormat, quality, out)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not store an image in AnkiDroid", e)
+            null
         }
     }
 
@@ -1665,11 +1795,11 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * Result of a successful write. The tapped link is relabeled ("Added" or "Overwritten") and
      * colored by [statusAfterWrite], every other link of the entry is colored by a fresh
      * duplicate check (see checkOtherAnkiLinks), and the lookup's entries are returned to show
-     * them. With unknown markers a plain message is returned instead (an UpdateResult cannot
-     * carry text), so the warning reaches the user; the tapped link's new label and color then
-     * show the next time a tap refreshes the lookup, and the other links are not checked. If the
-     * lookup is no longer tracked, the note was still written, so a plain confirmation is
-     * returned.
+     * them. With unknown markers, images AnkiDroid did not accept, or images the host denied, a
+     * plain message is returned instead (an UpdateResult cannot carry text), so the warning
+     * reaches the user; the tapped link's new label and color then show the next time a tap
+     * refreshes the lookup, and the other links are not checked. If the lookup is no longer
+     * tracked, the note was still written, so a plain confirmation is returned.
      */
     private suspend fun finishAnkiWrite(
         ref: AnkiLinkRef,
@@ -1678,11 +1808,14 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         added: Boolean,
         statusAfterWrite: AnkiLinkStatus,
         fieldNames: List<String>,
-        unknownMarkers: List<String>
+        unknownMarkers: List<String>,
+        failedMediaMarkers: List<String>,
+        imagesDenied: Boolean
     ): CustomActionResult {
         val format = context.formats[formatIndex]
         val write = if (added) AnkiNoteWrite.ADDED else AnkiNoteWrite.OVERWRITTEN
-        val otherStatuses = if (unknownMarkers.isEmpty() && ankiLookups.containsKey(ref.token)) {
+        val hasWarnings = unknownMarkers.isNotEmpty() || failedMediaMarkers.isNotEmpty() || imagesDenied
+        val otherStatuses = if (!hasWarnings && ankiLookups.containsKey(ref.token)) {
             checkOtherAnkiLinks(context, formatIndex, mutableMapOf(format.modelId to fieldNames))
         } else {
             emptyMap()
@@ -1692,19 +1825,35 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             it.statuses[formatIndex] = statusAfterWrite
             it.statuses.putAll(otherStatuses)
         }
-        if (unknownMarkers.isEmpty()) {
+        if (!hasWarnings) {
             if (entries != null) return CustomActionResult.UpdateResult(DictionaryResult(entries = entries))
             return CustomActionResult.SuccessMessage(
                 getString(if (added) R.string.anki_note_added else R.string.anki_note_updated)
             )
         }
-        return CustomActionResult.SuccessMessage(
-            getString(
-                if (added) R.string.anki_note_added_unknown_markers else R.string.anki_note_updated_unknown_markers,
-                format.name,
-                unknownMarkers.joinToString(", ") { "{$it}" }
-            )
-        )
+        val messages = buildList {
+            if (unknownMarkers.isNotEmpty()) {
+                add(
+                    getString(
+                        if (added) R.string.anki_note_added_unknown_markers else R.string.anki_note_updated_unknown_markers,
+                        format.name,
+                        unknownMarkers.joinToString(", ") { "{$it}" }
+                    )
+                )
+            }
+            if (failedMediaMarkers.isNotEmpty()) {
+                add(
+                    getString(
+                        if (added) R.string.anki_note_added_media_failed else R.string.anki_note_updated_media_failed,
+                        failedMediaMarkers.joinToString(", ") { "{$it}" }
+                    )
+                )
+            }
+            if (imagesDenied) {
+                add(getString(if (added) R.string.anki_note_added_images_denied else R.string.anki_note_updated_images_denied))
+            }
+        }
+        return CustomActionResult.SuccessMessage(messages.joinToString(" "))
     }
 
     override fun onShutdown() {
