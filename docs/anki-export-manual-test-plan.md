@@ -52,12 +52,11 @@ Throughout:
 Already installed (this plan does not cover installing them): on desktop, Anki with the AnkiConnect
 add-on, Python 3, `adb`, a checkout of this repository with what its README lists for building it,
 and a browser with Yomitan (scanning with **Shift**, its default) and the five dictionaries of R3
-imported; on Android, AnkiDroid (from the Play Store, first-run
-setup done), the host app (`dokuen-android`) with Dokuen Pro, and this plugin with the five
-dictionaries of R3 imported, enabled in R3's order (Up/Down arrows), no other dictionary enabled, and
-no sort dictionary chosen. Dokuen Pro is needed because `AuditTerm` has `screenshot` and
-`clipboard-image` fields: without it, every add shows a message that images need Dokuen Pro instead
-of relabeling the link, as the steps expect.
+imported; on Android, AnkiDroid (from the Play Store, first-run setup done), the host app
+(`dokuen-android`) with Dokuen Pro, and this plugin with the five dictionaries of R3 imported,
+enabled in R3's order (Up/Down arrows), no other dictionary enabled, and no sort dictionary chosen.
+Dokuen Pro is needed because `AuditTerm` has `screenshot` and `clipboard-image` fields: without it,
+every add also shows a message that those fields were left empty, which the steps do not expect.
 
 - [ ] **1.1** Desktop: start Anki.
 - [ ] **1.2** Desktop: in Yomitan's settings, **Backup** → **Export settings**. Note where the file is saved.
@@ -198,7 +197,7 @@ The same notes on the plugin, in the same order, scanning the test page in Chrom
 - [ ] **8.19** Press the keyboard's **Done** key. Confirm the field now reads `jlpt-n3 vocab core2k listening`, as desktop's did in 7.17.
 - [ ] **8.20** Scan `食べる`. Add 食べる【たべる】 via `AuditVocab`.
 - [ ] **8.21** Hide the overlay. In the **Anki Export** tab, clear **Card tags** so it is empty, and press **Done**.
-- [ ] **8.22** Scan `食べる`. Add 食べる【たべる】 via `AuditBadMarker`. Confirm the note is added: instead of relabeling the link **Added**, the host shows the message `Note added to Anki, but card format "AuditBadMarker" uses unknown marker(s): {expresion}` in its own message area (a result the plugin refreshes cannot also carry a message, see R7). Compare it with desktop's message in 7.20: the general shape should match, not the wording or where it is shown.
+- [ ] **8.22** Scan `食べる`. Add 食べる【たべる】 via `AuditBadMarker`. Confirm the note is added: the link reads **Added: AuditBadMarker**, and the host also shows the message `Note added to Anki, but card format "AuditBadMarker" uses unknown marker(s): {expresion}` in its own message area. Compare it with desktop's message in 7.20: the general shape should match, not the wording or where it is shown.
 - [ ] **8.23** Hide the overlay. In the plugin's **Dictionaries** tab, use the arrows to move `JMnedict [2026-09-25]` above `Jitendex.org [2026-05-05]`.
 - [ ] **8.24** Scan `京都`. Confirm the 京都【きょうと】 entry now shows JMnedict's definition first. Add 京都【きょうと】 via `AuditVocab`.
 - [ ] **8.25** Hide the overlay. In **Dictionaries**, move `Jitendex.org [2026-05-05]` back above `JMnedict [2026-09-25]`. Confirm the order is Jitendex, JMnedict, KANJIDIC, JPDBv2㋕, BCCWJ.
@@ -281,7 +280,7 @@ card; hide Dokuen's overlay to change them, as for every plugin setting.
 - [ ] **13.8** In a text editor app (for example Google Keep), type the two lines `<b>bold</b>` and `second line`, select both, and copy them. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-text` field shows both lines, one below the other, with `<b>bold</b>` shown as typed rather than in bold, and that its `clipboard-image` field is empty.
 - [ ] **13.9** Plugin: set "{screenshot} behavior" to **Show crop UI** and "When a duplicate is detected" to **Prevent adding**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm "This note already exists in Anki." and that no crop UI appeared.
 - [ ] **13.10** Plugin: set **Allow overwriting**, and in `AuditVocab`, set the `screenshot` field's overwrite mode to **Skip**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no crop UI appears and the link reads **Overwritten: AuditVocab**. In AnkiDroid, confirm the first `猫` note (the one from 13.1) still shows its screenshot.
-- [ ] **13.11** If a Dokuen account or build without Dokuen Pro is available, switch to it (otherwise skip this step). Plugin: set **Allow adding** and "{screenshot} behavior" **Full screen**. Copy some text. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears and the message says the note was added without images because images from Dokuen require Dokuen Pro. In AnkiDroid, confirm the new note's `screenshot` and `clipboard-image` fields are empty and its `clipboard-text` field holds the copied text. Switch back to Dokuen Pro.
+- [ ] **13.11** If a Dokuen account or build without Dokuen Pro is available, switch to it (otherwise skip this step). Plugin: set **Allow adding** and "{screenshot} behavior" **Full screen**. Copy some text. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears, the link reads **Added: AuditVocab**, and the message reads `Note added successfully, but with empty {screenshot} and {clipboard-image} fields (images require Dokuen Pro).` In AnkiDroid, confirm the new note's `screenshot` and `clipboard-image` fields are empty and its `clipboard-text` field holds the copied text. Switch back to Dokuen Pro.
 - [ ] **13.12** Desktop: in the setup script's window, press **Enter** to stop serving the test page.
 
 ## Phase 14: Finish (Android)

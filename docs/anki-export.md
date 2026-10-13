@@ -87,14 +87,15 @@ and calls into `AnkiDroidClient` to add or update the note (see "Duplicate detec
 rendering, it checks that the format's note type and deck still exist in AnkiDroid: AnkiDroid
 accepts a note for a deck id that no longer exists and puts its cards in no deck, where no deck
 list shows them, so a deleted deck or note type is reported instead, as AnkiConnect reports a deck
-or note type it cannot find. On success it returns a
-`CustomActionResult.UpdateResult` re-rendering the lookup's entries with the tapped link relabeled (see
-"After a tap"). The host replaces its whole displayed result with what an `UpdateResult` carries, so
-the entries returned are always those of the lookup that produced the link, never the most recent
-lookup's. If that lookup has been evicted in the meantime, a plain "Note added"/"Note updated"
-message is returned instead. Failures (AnkiDroid missing, permission missing, the format's deck or
-note type deleted, add or update failed, export disabled, stale link) are thrown as
-`DictionaryException`s, which the host shows as an error message.
+or note type it cannot find. On success it returns a `CustomActionResult.UpdateResult` re-rendering
+the lookup's entries with the tapped link relabeled (see "After a tap"). The host replaces its whole
+displayed result with what an `UpdateResult` carries, so the entries returned are always those of the
+lookup that produced the link, never the most recent lookup's. A warning about the write (unknown
+markers, or images that could not be stored or were denied) is the `UpdateResult`'s message, which the
+host shows along with the refreshed entries. If that lookup has been evicted in the meantime, the
+warning or a plain "Note added"/"Note updated" message is returned instead. Failures (AnkiDroid
+missing, permission missing, the format's deck or note type deleted, add or update failed, export
+disabled, stale link) are thrown as `DictionaryException`s, which the host shows as an error message.
 
 **After a tap.** A link whose tap added a note reads "Added: `<format>`", and one whose tap overwrote
 an existing note reads "Overwritten: `<format>`" (the shape glyph stays). Only the tapped format's link
@@ -128,10 +129,8 @@ substituted in place. Only a genuinely unrecognized marker name is a template er
 marker from the original's `getStandardFieldMarkers()` resolves to something, even if that something
 is currently an empty string. As in the original, a template error does not stop the export: the
 unknown marker is written into the field as `{<marker>-render-error}`, the note is still added or
-updated, and the result message names the unknown markers. That message replaces the refresh
-(an `UpdateResult` cannot carry text), so the link's "Added"/"Overwritten" label and its color only
-show the next time a tap refreshes the lookup's entries, and the entry's other links are not
-checked on that tap.
+updated, and the result message names the unknown markers. The message comes with the refreshed
+entries, so the link is relabeled and recolored as after any other write.
 
 Each supported marker reproduces the output of the matching partial in the original's default
 field templates (`ext/data/templates/default-anki-field-templates.handlebars`) under its default
@@ -199,7 +198,8 @@ double-brace output escapes it again. An image that cannot be encoded or that An
 accept leaves its marker empty and is reported after the save, like an unknown marker. Dokuen
 versions older than SDK 0.7.0 provide no images. As of SDK 0.7.0 Dokuen denies images to users
 without Dokuen Pro (`ImageRequestResult.Denied`); the note is written with the image markers empty,
-no further image is requested, and the message after the save says images need Dokuen Pro.
+no further image is requested, and the message after the save names the markers left empty, for
+example "Note added successfully, but with empty {screenshot} field (images require Dokuen Pro)."
 
 `{clipboard-text}` prints the clipboard's text (`CustomActionContext.requestClipboardText`),
 requested after the images under the same rules, and also when images were denied (Dokuen does

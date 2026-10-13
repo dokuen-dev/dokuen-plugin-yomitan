@@ -109,8 +109,10 @@
     <string name="anki_note_not_added">Note not added.</string>
     <string name="anki_note_added_media_failed">Note added to Anki, but AnkiDroid did not accept the image for: %1$s</string>
     <string name="anki_note_updated_media_failed">Note updated in Anki, but AnkiDroid did not accept the image for: %1$s</string>
-    <string name="anki_note_added_images_denied">Note added to Anki without images: images from Dokuen require Dokuen Pro.</string>
-    <string name="anki_note_updated_images_denied">Note updated in Anki without new images: images from Dokuen require Dokuen Pro.</string>
+    <string name="anki_note_added_image_denied">Note added successfully, but with empty %1$s field (images require Dokuen Pro).</string>
+    <string name="anki_note_updated_image_denied">Note updated successfully, but with empty %1$s field (images require Dokuen Pro).</string>
+    <string name="anki_note_added_images_denied">Note added successfully, but with empty %1$s and %2$s fields (images require Dokuen Pro).</string>
+    <string name="anki_note_updated_images_denied">Note updated successfully, but with empty %1$s and %2$s fields (images require Dokuen Pro).</string>
     <string name="anki_note_already_exists">This note already exists in Anki.</string>
 
     <!-- Plural for stats badge -->

@@ -1678,7 +1678,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             }
             return finishAnkiWrite(
                 ref, linkContext, formatIndex, added = false, statusAfterWrite, fieldNames, unknownMarkers,
-                media.failedMarkers, media.imagesDenied
+                media.failedMarkers, media.deniedMarkers
             )
         }
 
@@ -1686,20 +1686,20 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_add_failed))
         return finishAnkiWrite(
             ref, linkContext, formatIndex, added = true, statusAfterWrite, fieldNames, unknownMarkers,
-            media.failedMarkers, media.imagesDenied
+            media.failedMarkers, media.deniedMarkers
         )
     }
 
     /**
      * The images a note write got: their AnkiDroid file names, the markers whose image could not
-     * be stored, whether the host denied images (the user has no Dokuen Pro), and the clipboard
-     * text.
+     * be stored, the markers left empty because the host denied images (the user has no Dokuen
+     * Pro), and the clipboard text.
      */
     private data class AnkiMedia(
         val screenshotFileName: String? = null,
         val clipboardImageFileName: String? = null,
         val failedMarkers: List<String> = emptyList(),
-        val imagesDenied: Boolean = false,
+        val deniedMarkers: List<String> = emptyList(),
         val clipboardText: String? = null
     ) {
         val isEmpty: Boolean
@@ -1710,9 +1710,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * Requests from the host, and stores in AnkiDroid, the images the write will use (see
      * AnkiMediaNeeds), the screenshot first. Returns null when the user cancelled, in which
      * case nothing further is requested and nothing may be written. Once the host denies one
-     * image it would deny the rest, so no further image is requested. Then requests the clipboard
-     * text if the write uses it; the host does not gate text on Dokuen Pro, so this happens even
-     * when images were denied.
+     * image it would deny the rest, so the remaining images are not requested and count as
+     * denied too. Then requests the clipboard text if the write uses it; the host does not gate
+     * text on Dokuen Pro, so this happens even when images were denied.
      */
     private suspend fun acquireAnkiMedia(
         actionContext: CustomActionContext,
@@ -1725,16 +1725,20 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         val timestamp = System.currentTimeMillis()
         var media = AnkiMedia()
         val failed = mutableListOf<String>()
+        val denied = mutableListOf<String>()
         for (marker in AnkiMediaNeeds.IMAGE_MARKERS) {
-            if (media.imagesDenied) break
             if (!AnkiMediaNeeds.isNeeded(marker, fieldNames, format.fields, existing)) continue
+            if (denied.isNotEmpty()) {
+                denied += marker
+                continue
+            }
             val isScreenshot = marker == AnkiMediaNeeds.SCREENSHOT
             val source = if (isScreenshot) ImageRequestSource.SCREENSHOT else ImageRequestSource.CLIPBOARD
             val interactive = isScreenshot && settings.screenshotBehavior == AnkiScreenshotBehavior.CROP
             when (val result = actionContext.requestImage(source, interactive)) {
                 ImageRequestResult.Cancelled -> return null
                 ImageRequestResult.NoImage -> Unit
-                ImageRequestResult.Denied -> media = media.copy(imagesDenied = true)
+                ImageRequestResult.Denied -> denied += marker
                 is ImageRequestResult.Image -> {
                     val fileName = try {
                         storeAnkiImage(result.bitmap, isScreenshot, settings, timestamp)
@@ -1755,7 +1759,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             val text = actionContext.requestClipboardText()?.replace("\r\n", "\n")?.replace('\r', '\n')
             media = media.copy(clipboardText = text)
         }
-        return media.copy(failedMarkers = failed)
+        return media.copy(failedMarkers = failed, deniedMarkers = denied)
     }
 
     /**
@@ -1795,11 +1799,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * Result of a successful write. The tapped link is relabeled ("Added" or "Overwritten") and
      * colored by [statusAfterWrite], every other link of the entry is colored by a fresh
      * duplicate check (see checkOtherAnkiLinks), and the lookup's entries are returned to show
-     * them. With unknown markers, images AnkiDroid did not accept, or images the host denied, a
-     * plain message is returned instead (an UpdateResult cannot carry text), so the warning
-     * reaches the user; the tapped link's new label and color then show the next time a tap
-     * refreshes the lookup, and the other links are not checked. If the lookup is no longer
-     * tracked, the note was still written, so a plain confirmation is returned.
+     * them, along with a warning for unknown markers, images AnkiDroid did not accept, or images
+     * the host denied. If the lookup is no longer tracked, the note was still written, so the
+     * warning or a plain confirmation is returned.
      */
     private suspend fun finishAnkiWrite(
         ref: AnkiLinkRef,
@@ -1810,12 +1812,11 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         fieldNames: List<String>,
         unknownMarkers: List<String>,
         failedMediaMarkers: List<String>,
-        imagesDenied: Boolean
+        deniedImageMarkers: List<String>
     ): CustomActionResult {
         val format = context.formats[formatIndex]
         val write = if (added) AnkiNoteWrite.ADDED else AnkiNoteWrite.OVERWRITTEN
-        val hasWarnings = unknownMarkers.isNotEmpty() || failedMediaMarkers.isNotEmpty() || imagesDenied
-        val otherStatuses = if (!hasWarnings && ankiLookups.containsKey(ref.token)) {
+        val otherStatuses = if (ankiLookups.containsKey(ref.token)) {
             checkOtherAnkiLinks(context, formatIndex, mutableMapOf(format.modelId to fieldNames))
         } else {
             emptyMap()
@@ -1825,13 +1826,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             it.statuses[formatIndex] = statusAfterWrite
             it.statuses.putAll(otherStatuses)
         }
-        if (!hasWarnings) {
-            if (entries != null) return CustomActionResult.UpdateResult(DictionaryResult(entries = entries))
-            return CustomActionResult.SuccessMessage(
-                getString(if (added) R.string.anki_note_added else R.string.anki_note_updated)
-            )
-        }
-        val messages = buildList {
+        val warnings = buildList {
             if (unknownMarkers.isNotEmpty()) {
                 add(
                     getString(
@@ -1849,11 +1844,30 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                     )
                 )
             }
-            if (imagesDenied) {
-                add(getString(if (added) R.string.anki_note_added_images_denied else R.string.anki_note_updated_images_denied))
+            if (deniedImageMarkers.isNotEmpty()) {
+                val markers = deniedImageMarkers.map { "{$it}" }
+                // There are only two image markers.
+                add(
+                    if (markers.size == 1) {
+                        getString(
+                            if (added) R.string.anki_note_added_image_denied else R.string.anki_note_updated_image_denied,
+                            markers[0]
+                        )
+                    } else {
+                        getString(
+                            if (added) R.string.anki_note_added_images_denied else R.string.anki_note_updated_images_denied,
+                            markers[0],
+                            markers[1]
+                        )
+                    }
+                )
             }
         }
-        return CustomActionResult.SuccessMessage(messages.joinToString(" "))
+        val warning = warnings.takeIf { it.isNotEmpty() }?.joinToString(" ")
+        if (entries != null) return CustomActionResult.UpdateResult(DictionaryResult(entries = entries), warning)
+        return CustomActionResult.SuccessMessage(
+            warning ?: getString(if (added) R.string.anki_note_added else R.string.anki_note_updated)
+        )
     }
 
     override fun onShutdown() {

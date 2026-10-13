@@ -208,6 +208,10 @@ class AnkiExecutionTest {
     private fun updatedEntry(result: CustomActionResult): DictionaryEntry =
         (result as CustomActionResult.UpdateResult).result.entries.single()
 
+    /** The warning an UpdateResult carries along with the refreshed entries. */
+    private fun warning(result: CustomActionResult): String =
+        (result as CustomActionResult.UpdateResult).message!!
+
     private suspend fun executeError(service: YomitanDictionaryPluginService, payload: String): String {
         try {
             service.executeAction(payload)
@@ -250,9 +254,10 @@ class AnkiExecutionTest {
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
         assertEquals(listOf("食べる", "{expresion-render-error}"), fieldsCaptor.firstValue)
-        val message = (result as CustomActionResult.SuccessMessage).message
+        val message = warning(result)
         assertTrue(message, message.contains("{expresion}"))
         assertTrue(message, message.contains("Vocab"))
+        assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(result)))
     }
 
     @Test
@@ -774,7 +779,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun addWithUnknownMarkersIsReportedAndItsLinkShowsAddedOnTheNextRefresh() = runBlocking<Unit> {
+    fun addWithUnknownMarkersIsReportedAndRelabelsItsLinkAtOnce() = runBlocking<Unit> {
         val client = mockClient()
         val badFormat = format(
             name = "Bad",
@@ -783,11 +788,10 @@ class AnkiExecutionTest {
         val service = newService(settings(badFormat, format(name = "Vocab")), client)
         val payloads = addPayloads(lookup(service, "食べる").entries[0])
 
-        val warning = service.executeAction(payloads[0])
-        val refreshed = service.executeAction(payloads[1])
+        val result = service.executeAction(payloads[0])
 
-        assertTrue(warning is CustomActionResult.SuccessMessage)
-        assertEquals(listOf("● Added: Bad", "● Added: Vocab"), linkLabels(updatedEntry(refreshed)))
+        assertTrue(warning(result).contains("{expresion}"))
+        assertEquals(listOf("● Added: Bad", "● Add: Vocab"), linkLabels(updatedEntry(result)))
     }
 
     @Test
@@ -1293,7 +1297,7 @@ class AnkiExecutionTest {
         val result = service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
 
         verify(client).addNote(any(), any(), any(), any())
-        val message = (result as CustomActionResult.SuccessMessage).message
+        val message = warning(result)
         assertTrue(message, message.contains("{screenshot}"))
     }
 
@@ -1430,7 +1434,7 @@ class AnkiExecutionTest {
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
         assertEquals("", fieldsCaptor.firstValue[1])
-        val message = (result as CustomActionResult.SuccessMessage).message
+        val message = warning(result)
         assertTrue(message, message.contains("{screenshot}"))
     }
 
@@ -1450,8 +1454,31 @@ class AnkiExecutionTest {
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
         assertEquals("", fieldsCaptor.firstValue[1])
-        val message = (result as CustomActionResult.SuccessMessage).message
-        assertTrue(message, message.contains("Dokuen Pro"))
+        assertEquals(
+            "Note added successfully, but with empty {screenshot} and {clipboard-image} fields " +
+                    "(images require Dokuen Pro).",
+            warning(result)
+        )
+        assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(result)))
+    }
+
+    @Test
+    fun deniedOnOverwriteSaysTheNoteWasUpdated() = runBlocking<Unit> {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE), client)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(
+            payload,
+            FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Denied))
+        )
+
+        verify(client).updateNoteFields(eq(55L), any())
+        assertEquals(
+            "Note updated successfully, but with empty {screenshot} field (images require Dokuen Pro).",
+            warning(result)
+        )
     }
 
     @Test
@@ -1500,8 +1527,10 @@ class AnkiExecutionTest {
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
         assertEquals("|copied", fieldsCaptor.firstValue[1])
-        val message = (result as CustomActionResult.SuccessMessage).message
-        assertTrue(message, message.contains("Dokuen Pro"))
+        assertEquals(
+            "Note added successfully, but with empty {screenshot} field (images require Dokuen Pro).",
+            warning(result)
+        )
     }
 
     @Test
