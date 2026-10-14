@@ -1131,6 +1131,55 @@ class AnkiExecutionTest {
     }
 
     @Test
+    fun anotherLinkKeyedOnSentenceFuriganaIsNotCheckedWithoutIt() = runBlocking<Unit> {
+        val client = mockClient()
+        val furiganaKeyed = format(
+            name = "Sentence",
+            modelId = 3L,
+            fields = mapOf(
+                "Front" to AnkiField(value = "{sentence-furigana}"),
+                "Back" to AnkiField(value = "{expression}")
+            )
+        )
+        val service = newService(settings(format(), furiganaKeyed), client)
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        // The tapped format does not use the furigana, so none is requested, and the other
+        // link's key cannot be rendered the way a tap on it would render it.
+        val entry = scan(service, "冷たい水入りの瓶。次の文。", "水入り").entries.single { it.headword == "水入り" }
+        service.executeAction(addPayloads(entry)[0], context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+        verify(client, never()).findDuplicateNotes(eq(3L), any(), any(), any<AnkiDuplicateScope>(), any())
+    }
+
+    @Test
+    fun anotherLinkKeyedOnSentenceFuriganaIsCheckedOnceTheFuriganaIsKnown() = runBlocking<Unit> {
+        val client = mockClient()
+        val furiganaKeyed = format(
+            name = "Sentence",
+            modelId = 3L,
+            fields = mapOf(
+                "Front" to AnkiField(value = "{sentence-furigana-plain}"),
+                "Back" to AnkiField(value = "{expression}")
+            )
+        )
+        val service = newService(settings(furiganaFormat, furiganaKeyed), client)
+        val context = FakeActionContext(readings = { sentenceReadings() })
+        val entry = scan(service, "冷たい水入りの瓶。次の文。", "水入り").entries.single { it.headword == "水入り" }
+
+        service.executeAction(addPayloads(entry)[0], context)
+
+        verify(client).findDuplicateNotes(
+            eq(3L),
+            any(),
+            eq("冷[つめ]たい 水[みず] 入[い]りの 瓶[びん]。"),
+            any<AnkiDuplicateScope>(),
+            any()
+        )
+    }
+
+    @Test
     fun readingsAreRequestedBeforeImagesAndClipboardText() = runBlocking<Unit> {
         val client = mockClient().also { stubAddImage(it) }
         val format = imageFormat(picture = "{screenshot}{clipboard-text}{sentence-furigana}")

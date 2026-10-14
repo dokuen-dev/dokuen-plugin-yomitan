@@ -409,7 +409,10 @@ same entry, when an AnkiDroid round-trip is expected anyway:
   (`checkOtherAnkiLinks`: its note type's first field, rendered with the entry's note data, and the
   settings snapshot the tapped link uses), one `findDuplicateNotes` query per format, plus a
   field-list query per note type the tapped format does not share. A format that is not searched
-  (duplicate checking off, empty first field) or whose search fails keeps its color.
+  (duplicate checking off, empty first field) or whose search fails keeps its color. So does a
+  format whose first field uses `{sentence-furigana}` or `{sentence-furigana-plain}` while the
+  entry has no sentence furigana yet (the tapped format did not need it): a tap on it would ask
+  Dokuen for the furigana first, so its key cannot be rendered here the way that tap would render it.
 - Links of other entries and other lookups are not checked and keep their colors.
 - A tap refused under "Prevent adding" returns a message rather than a refresh. Its link turns
   gray at the next refresh, and the other links are not checked on that tap.

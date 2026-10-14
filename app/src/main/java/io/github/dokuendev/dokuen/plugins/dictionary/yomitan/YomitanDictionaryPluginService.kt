@@ -8,17 +8,18 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardIcon
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateBehavior
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldMerger
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaFileNames
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaNeeds
-import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSentenceFurigana
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteData
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteDataBuilder
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteInfo
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSentenceExtractor
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSentenceFurigana
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiTemplateEngine
@@ -983,9 +984,13 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             if (index == tappedIndex) continue
             try {
                 val fieldNames = fieldLists.getOrPut(format.modelId) { ankiDroidClient.getFieldList(format.modelId) }
+                val noteData = context.noteData()
+                // A tap on this link would first ask Dokuen for the sentence's furigana, which this
+                // tap did not need, so its key cannot be rendered the way that tap would render it.
+                if (needsSentenceFurigana(noteData, fieldNames.take(1), format.fields)) continue
                 val key = fieldNames.firstOrNull()
                     ?.let { format.fields[it] }
-                    ?.let { AnkiTemplateEngine.renderField(it.value, context.noteData()).text }
+                    ?.let { AnkiTemplateEngine.renderField(it.value, noteData).text }
                     ?: ""
                 val duplicates = findAnkiDuplicates(settings, format, key) ?: continue
                 statuses[index] = AnkiLinkStatus.of(
@@ -1716,16 +1721,28 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         actionContext: CustomActionContext
     ): AnkiNoteData {
         val data = context.noteData()
-        val sentence = data.cloze?.sentence ?: return data
-        if (data.sentenceFurigana != null || sessionLanguage != "ja" || sentence.isEmpty() ||
-            sentence.length > CustomActionContext.MAX_READINGS_TEXT_LENGTH ||
-            !AnkiSentenceFurigana.isUsed(fieldNames, format.fields)
-        ) {
-            return data
-        }
+        val sentence = data.cloze?.sentence
+        if (sentence == null || !needsSentenceFurigana(data, fieldNames, format.fields)) return data
         val words = actionContext.requestReadings(sentence) ?: return data
         return data.copy(sentenceFurigana = AnkiSentenceFurigana.fromReadings(sentence, words))
             .also { context.updateNoteData(it) }
+    }
+
+    /**
+     * Whether rendering [fieldNames] of [fields] with [data] would ask Dokuen for the cloze
+     * sentence's furigana first: a field uses either sentence furigana marker, the note data has no
+     * furigana yet, and the sentence can be sent (a `ja` session, at most
+     * CustomActionContext.MAX_READINGS_TEXT_LENGTH long).
+     */
+    private fun needsSentenceFurigana(
+        data: AnkiNoteData,
+        fieldNames: List<String>,
+        fields: Map<String, AnkiField>
+    ): Boolean {
+        val sentence = data.cloze?.sentence ?: return false
+        return data.sentenceFurigana == null && sessionLanguage == "ja" && sentence.isNotEmpty() &&
+                sentence.length <= CustomActionContext.MAX_READINGS_TEXT_LENGTH &&
+                AnkiSentenceFurigana.isUsed(fieldNames, fields)
     }
 
     /**
