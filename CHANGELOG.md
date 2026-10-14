@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0]
+
+### Added
+
+- More supported Anki field markers (requires Dokuen version 1.6.0 or newer):
+    - Image and clipboard fields: `{screenshot}`, `{clipboard-image}`, and `{clipboard-text}`.
+      Images require Dokuen Pro; without it, the note is still written but with the image fields
+      empty.
+    - `{sentence-furigana}` and `{sentence-furigana-plain}` now include the sentence's readings,
+      as ruby HTML and Anki's bracket notation, respectively. (Previously both wrote the plain
+      sentence without readings.)
+- A new "Images" settings card selects the screenshot behavior, the image format (PNG or JPEG), and
+  the JPEG quality.
+
+### Changed
+
+- After an Anki export with a warning, the warning is now shown along with the relabeled action
+  links, rather than in place of them.
+
 ## [1.2.0]
 
 ### Added
