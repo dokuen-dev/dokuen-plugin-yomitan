@@ -12,6 +12,7 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldMerge
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaFileNames
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaNeeds
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSentenceFurigana
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteData
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteDataBuilder
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteInfo
@@ -160,6 +161,10 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     private var sortFrequencyDictionary: String = ""
     private var sortFrequencyDictionaryOrder: String = "descending"
     private var isDarkMode: Boolean = false
+
+    /** The language of the text Dokuen reads (PluginHostConfigKeys.LANGUAGE). */
+    @Volatile
+    private var sessionLanguage = "ja"
     private lateinit var db: AppDatabase
     private lateinit var renderer: YomitanRenderer
     private val deinflector = JapaneseDeinflector()
@@ -216,6 +221,11 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
         suspend fun noteData(): AnkiNoteData =
             cachedNoteData ?: buildNoteData().also { cachedNoteData = it }
+
+        /** Replaces the reused note data, for what a tap adds to it (the sentence's furigana). */
+        fun updateNoteData(data: AnkiNoteData) {
+            cachedNoteData = data
+        }
     }
 
     /**
@@ -311,6 +321,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
             val themeString = config?.getString(PluginHostConfigKeys.UI_THEME) ?: "light"
             isDarkMode = (themeString == "dark")
+            // Dokuen may leave the key out for a plugin with a single source language, which is ja.
+            sessionLanguage = config?.getString(PluginHostConfigKeys.LANGUAGE) ?: "ja"
 
             val cssProcessor = CssProcessor()
             renderer = YomitanRenderer(db, cssProcessor)
@@ -1601,7 +1613,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 getString(R.string.error_anki_deck_missing, format.name, format.deckName)
             )
         }
-        val noteData = linkContext.noteData()
+        val noteData = noteDataWithSentenceFurigana(linkContext, format, fieldNames, actionContext)
         val rendered = fieldNames.map { fieldName ->
             format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, noteData) }
         }
@@ -1688,6 +1700,32 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             ref, linkContext, formatIndex, added = true, statusAfterWrite, fieldNames, unknownMarkers,
             media.failedMarkers, media.deniedMarkers
         )
+    }
+
+    /**
+     * [context]'s note data, with the cloze sentence's furigana requested from Dokuen first when a
+     * current field of [format] uses `{sentence-furigana}` or `{sentence-furigana-plain}` and the
+     * note data has none yet. It is requested before any field is rendered, so the duplicate key
+     * includes it. The answer is kept for later taps of the same entry; a null answer is not, so
+     * the next tap asks again.
+     */
+    private suspend fun noteDataWithSentenceFurigana(
+        context: AnkiLinkContext,
+        format: AnkiCardFormat,
+        fieldNames: List<String>,
+        actionContext: CustomActionContext
+    ): AnkiNoteData {
+        val data = context.noteData()
+        val sentence = data.cloze?.sentence ?: return data
+        if (data.sentenceFurigana != null || sessionLanguage != "ja" || sentence.isEmpty() ||
+            sentence.length > CustomActionContext.MAX_READINGS_TEXT_LENGTH ||
+            !AnkiSentenceFurigana.isUsed(fieldNames, format.fields)
+        ) {
+            return data
+        }
+        val words = actionContext.requestReadings(sentence) ?: return data
+        return data.copy(sentenceFurigana = AnkiSentenceFurigana.fromReadings(sentence, words))
+            .also { context.updateNoteData(it) }
     }
 
     /**

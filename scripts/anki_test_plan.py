@@ -390,6 +390,12 @@ def split_styles(text):
     return STYLE_PATTERN.sub('<style></style>', text), STYLE_PATTERN.findall(text)
 
 
+def without_term_spans(value):
+    """The value without sentence-furigana's <span class="term"> wrappers, which follow each
+    platform's own word segmentation."""
+    return None if value is None else value.replace('<span class="term">', '').replace('</span>', '')
+
+
 def mask_known_differences(text):
     """Blanks what the plan records rather than compares: images."""
     return IMAGE_PATTERN.sub('<img>', text)
@@ -633,11 +639,11 @@ def check_term_notes(report, desktop, plugin):
                 if status == 'FAIL':
                     report.add('C2.21', 'FAIL', label, '%s should be empty on the plugin' % field, None, p_value)
             elif field in SENTENCE_FURIGANA_FIELDS:
-                rule = 'plugin equals its own sentence; desktop recorded'
-                status = 'PASS' if p_value == p.get('sentence') else 'FAIL'
+                rule = 'identical apart from <span class="term"> boundaries'
+                status = 'PASS' if without_term_spans(d_value) == without_term_spans(p_value) else 'FAIL'
                 if status == 'FAIL':
-                    report.add('C2.20', 'FAIL', label, '%s should equal the plugin note\'s sentence field' % field,
-                               None, p_value)
+                    report.add('C2.20', 'FAIL', label, '%s differs apart from term boundaries' % field,
+                               d_value, p_value)
             elif field in STYLED_FIELDS + STYLED_FIRST_FIELDS:
                 rule = 'identical apart from <style> text and images'
                 styled_step = step if label == 'T6b' else ('C2.13' if field in STYLED_FIRST_FIELDS else 'C2.10')
@@ -737,10 +743,10 @@ def check_term_notes(report, desktop, plugin):
                   for field, value in note.fields.items() if '雨が降' in value or '窓の外' in value]
         report.add('C4.2', 'FAIL' if leaked else 'PASS', 'T8',
                    'the outer sentences appear in %s' % leaked if leaked else 'neither outer sentence appears')
-        for field in SENTENCE_FURIGANA_FIELDS:
-            value = p.get(field)
-            report.add('C4.3', 'PASS' if value == T8_SENTENCE['sentence'] else 'FAIL', 'T8',
-                       'plugin %s is the plain sentence' % field, None, value)
+        for field, mark in (('sentence-furigana', '<ruby>'), ('sentence-furigana-plain', '[')):
+            value = p.get(field) or ''
+            report.add('C4.3', 'PASS' if mark in value else 'FAIL', 'T8',
+                       'plugin %s carries readings' % field, None, value)
 
     # The sentences scanned from a line of their own.
     for label, (word, kana) in SCANNED_LINES.items():

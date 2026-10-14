@@ -9,6 +9,13 @@ data class AnkiClozeData(
 )
 
 /**
+ * One segment of a sentence's furigana: [text] and its [reading], or "" for text without one. A
+ * term of the sentence is a list of these, like a line of the original's parsed text
+ * (ParseTextLine).
+ */
+data class AnkiFuriganaSegment(val text: String, val reading: String)
+
+/**
  * One frequency row attached to a note, mirroring the original's TermFrequency /
  * KanjiFrequency template objects. [frequency] is the numeric value and [displayValue]
  * the dictionary-supplied display string (null when the dictionary gave only a number);
@@ -66,6 +73,12 @@ data class AnkiNoteData(
     val dictionary: String = "",
     val dictionaryAlias: String = dictionary,
     val cloze: AnkiClozeData? = null,
+    /**
+     * The cloze sentence's furigana for `{sentence-furigana}` and `{sentence-furigana-plain}`.
+     * Each term is a list of segments. It is requested from the host on the first tap that needs
+     * it, and it is null until then or when the host gave none.
+     */
+    val sentenceFurigana: List<List<AnkiFuriganaSegment>>? = null,
     /**
      * The lookup's query, which the original's `{search-query}` prints: the longest text the
      * scan matched, the query of an internal link, or the kanji character.

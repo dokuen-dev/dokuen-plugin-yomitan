@@ -230,6 +230,58 @@ class AnkiTemplateEngineTest {
         assertEquals("", render("{sentence-furigana-plain}", termData.copy(cloze = null)))
     }
 
+    // 彼は毎日食べる。 as Dokuen reads it: 彼 / は / 毎日 / 食べる / 。
+    private val sentenceFurigana = listOf(
+        listOf(AnkiFuriganaSegment("彼", "かれ")),
+        listOf(AnkiFuriganaSegment("は", "")),
+        listOf(AnkiFuriganaSegment("毎日", "まいにち")),
+        listOf(AnkiFuriganaSegment("食", "た"), AnkiFuriganaSegment("べる", "")),
+        listOf(AnkiFuriganaSegment("。", ""))
+    )
+
+    @Test
+    fun testSentenceFuriganaWrapsEachTermAndRubiesItsReadings() {
+        // The note's term 食べる is not a segment of its own, so 食 keeps Dokuen's reading.
+        assertEquals(
+            "<span class=\"term\"><ruby>彼<rt>かれ</rt></ruby></span><span class=\"term\">は</span>" +
+                    "<span class=\"term\"><ruby>毎日<rt>まいにち</rt></ruby></span>" +
+                    "<span class=\"term\"><ruby>食<rt>た</rt></ruby>べる</span><span class=\"term\">。</span>",
+            render("{sentence-furigana}", termData.copy(sentenceFurigana = sentenceFurigana))
+        )
+    }
+
+    @Test
+    fun testSentenceFuriganaPlainSpacesEachReadingAndTrimsTheStart() {
+        assertEquals(
+            "彼[かれ]は 毎日[まいにち] 食[た]べる。",
+            render("{sentence-furigana-plain}", termData.copy(sentenceFurigana = sentenceFurigana))
+        )
+    }
+
+    @Test
+    fun testSentenceFuriganaUsesTheNotesReadingForItsOwnTerm() {
+        val furigana = listOf(listOf(AnkiFuriganaSegment("瓶", "びん")))
+        val note = termData.copy(expression = "瓶", reading = "かめ", sentenceFurigana = furigana)
+
+        assertEquals("<span class=\"term\"><ruby>瓶<rt>かめ</rt></ruby></span>", render("{sentence-furigana}", note))
+        assertEquals("瓶[かめ]", render("{sentence-furigana-plain}", note))
+        assertEquals("瓶[びん]", render("{sentence-furigana-plain}", note.copy(reading = "")))
+        val kanjiNote = kanjiData.copy(expression = "瓶", reading = "かめ", sentenceFurigana = furigana)
+        assertEquals("瓶[びん]", render("{sentence-furigana-plain}", kanjiNote))
+    }
+
+    @Test
+    fun testSentenceFuriganaIsNotHtmlEscaped() {
+        val furigana = listOf(listOf(AnkiFuriganaSegment("a<b>", "")), listOf(AnkiFuriganaSegment("&", "<r>")))
+        val note = termData.copy(sentenceFurigana = furigana)
+
+        assertEquals(
+            "<span class=\"term\">a<b></span><span class=\"term\"><ruby>&<rt><r></rt></ruby></span>",
+            render("{sentence-furigana}", note)
+        )
+        assertEquals("a<b> &[<r>]", render("{sentence-furigana-plain}", note))
+    }
+
     @Test
     fun testSentenceFuriganaFallbackIsNotHtmlEscaped() {
         val data = termData.copy(cloze = AnkiClozeData("a <b> & c", "", "", "", ""))

@@ -143,8 +143,8 @@ HTML-escaped the way Handlebars escapes them.
 `expression`, `reading`, `furigana`, `furigana-plain`, `character`, `dictionary`,
 `dictionary-alias` (the dictionary title, the original's default), `tags` (headword tags, then each
 definition's tags), `part-of-speech`, `conjugation`, `kunyomi`, `onyomi`, `onyomi-hiragana`,
-`stroke-count`, `sentence`, `sentence-furigana` and `sentence-furigana-plain` (both currently the
-plain sentence, see below), `cloze-prefix`, `cloze-body`, `cloze-body-kana`, `cloze-suffix`,
+`stroke-count`, `sentence`, `sentence-furigana` and `sentence-furigana-plain` (from Dokuen's
+readings, see below), `cloze-prefix`, `cloze-body`, `cloze-body-kana`, `cloze-suffix`,
 `search-query`, `frequencies`, `single-frequency-number`,
 `frequency-harmonic-rank`, `frequency-harmonic-occurrence`,
 `frequency-average-rank`, `frequency-average-occurrence`, `glossary` (+ `-brief`,
@@ -209,8 +209,23 @@ line break. CRLF and lone CR line breaks are first turned into LF, as the origin
 `<textarea>` does when it reads the clipboard. Dokuen hands over plain text cut
 to 10,000 UTF-16 code units; older Dokuen versions provide none, so the marker is empty there.
 
-The duplicate check's key is the first field rendered with the image and clipboard text markers
-empty.
+`{sentence-furigana}` and `{sentence-furigana-plain}` print the cloze sentence with furigana, as
+the original's `createFuriganaHtml` (a `<span class="term">` per term, `<ruby>TEXT<rt>READING</rt></ruby>`
+per reading) and `createFuriganaPlain` (` TEXT[READING]` per reading, leading whitespace trimmed),
+unescaped. The readings come from Dokuen (SDK 0.8.0 `CustomActionContext.requestReadings`): on a
+tap, before any field is rendered, the plugin sends the cloze sentence if a current field of the
+format uses either marker, the session language is `ja`, and the sentence is at most
+`CustomActionContext.MAX_READINGS_TEXT_LENGTH` (500) UTF-16 code units. Each word Dokuen returns
+is a term, and each stretch of text no word covers is one term without a reading
+(`AnkiSentenceFurigana`). As the original's `getReading` does, a segment whose text is a term
+note's own expression shows the note's reading. The answer is kept with the entry's note data, so
+later taps of the same entry do not ask again. When Dokuen gives no readings (older than SDK 0.8.0,
+a refused request, or Dokuen still starting), both markers print the plain sentence, which is what the
+original prints without furigana data, and the next tap asks again. The readings request is made
+before the image and clipboard text requests.
+
+The duplicate check's key is the first field rendered with the sentence furigana (when Dokuen gave
+it) and with the image and clipboard text markers empty.
 
 The four frequency aggregates (`{frequency-harmonic-rank}`, `{frequency-harmonic-occurrence}`,
 `{frequency-average-rank}`, `{frequency-average-occurrence}`) take the first value of each
@@ -430,23 +445,6 @@ API surface or a deliberate scope boundary:
   `AnkiSettings.kt`).
 - **`{audio}`, the pitch accent markers, and the page-context markers stay empty** until the
   plugin has the matching subsystem.
-- **Sentence furigana is not implemented (`{sentence-furigana}`, `{sentence-furigana-plain}`): both
-  print the plain sentence, without furigana.** The reason is runtime cost. The original builds these with its "scanning parser"
-  (`_textParseScanning` in `backend.js`): at every character position of the sentence it runs a
-  full dictionary search (every match length, with deinflection), takes the top entry, and splits
-  it into furigana segments. Ported faithfully, that is a dictionary search per position on the
-  tap path: with each deinflection candidate costing two Room queries, a normal sentence means
-  thousands of queries, and an unpunctuated OCR block (up to about 400 characters) far more, inside
-  the host's blocking custom-action call. The original gets away with it because its dictionary is
-  a local in-process store and it caches parses. Options that would make this version cheap enough
-  (a bulk-query scanner with a cap, timeout, and cache) would duplicate segmentation work the host
-  already does. Dokuen already segments text and determines furigana, but does not expose it to
-  plugins yet, because a dictionary plugin was not expected to need it. Support will wait for the
-  host SDK to provide the readings. The plugin will then build the marker values from what the
-  host supplies instead of scanning the dictionary itself. Until then both markers print the cloze
-  sentence unannotated (unescaped, like `{sentence}`), which is what the original's partials print
-  when their furigana data is unavailable, and resolve to an empty string when there is no
-  sentence context.
 - **Only English strings exist.** User-facing strings are in `strings.xml`, but the project has no
   `values-*` locale directory yet, so nothing is translated.
 
@@ -454,6 +452,23 @@ API surface or a deliberate scope boundary:
 
 **Differences.**
 
+- **Sentence furigana comes from Dokuen, not from the user's dictionaries.** The original builds
+  `{sentence-furigana}` with its scanning parser (`_textParseScanning` in `backend.js`): a full
+  dictionary search at each position, using the installed Yomitan dictionaries. The plugin uses
+  Dokuen's furigana, so a reading can differ from desktop's. Porting the scanning parser would
+  mean thousands of database queries per tap.
+- **Sentence furigana terms follow Dokuen's words.** Where the original's longest-match scan
+  would group text differently (for example, one dictionary match spanning two of Dokuen's words
+  that no correction joined), the `<span class="term">` boundaries differ. Ruby placement is the
+  same in the common case, and `{sentence-furigana-plain}` has no term boundaries.
+- **The duplicate check finds notes whose first field has sentence furigana.** The original
+  searches for duplicates with a note rendered without media (`requirements: []` in
+  `display-anki.js`), and it treats sentence furigana as media. When the first field uses
+  `{sentence-furigana}` or `{sentence-furigana-plain}`, desktop therefore searches for the plain
+  sentence, while the note it saves has the readings. Anki's checksum keeps the text of the
+  readings, so desktop never finds such a note as a duplicate. The plugin asks Dokuen for the
+  readings before it renders the key, so the key matches the note it saves and an existing note is
+  found. When Dokuen gives no readings, the key is the plain sentence, as on desktop.
 - **`{glossary-plain}` and `{glossary-plain-no-dictionary}` escape a leftover `>` as `&gt;`.** The
   original's `_getText` (`anki-template-renderer.js`) escapes it as `&rt;`, which is not an HTML
   entity (a typo), so desktop shows the literal text `&rt;` in the field. Text nodes are already
@@ -569,19 +584,18 @@ diverging from the original is the goal.
 
 Unit tests live under `app/src/test/java/.../anki/` (`AnkiSettingsStoreTest`,
 `AnkiTemplateEngineTest`, `AnkiGlossaryHtmlConverterTest`, `AnkiDictionaryStylesTest`, `AnkiNoteDataBuilderTest`,
-`AnkiSentenceExtractorTest`, `AnkiFieldMergerTest`, `AnkiFieldDefaultsTest`,
+`AnkiSentenceExtractorTest`, `AnkiSentenceFuriganaTest`, `AnkiFieldMergerTest`, `AnkiFieldDefaultsTest`,
 `AnkiStandardMarkersTest`, `AnkiDroidClientTest`, `AnkiFieldChecksumTest`, `TagsTextUtilTest`,
 `AnkiMediaNeedsTest`, `AnkiMediaFileNamesTest`) plus, at the top level,
 `AnkiE2ETest.kt` (the `onLookup` → action-link → `onExecuteCustomAction` round trip) and
 `AnkiExecutionTest.kt` (tapping a link against a mocked `AnkiDroidClient`: every duplicate
 behavior, a deleted deck or note type, the link labels and colors a tap leaves, the link cache,
 settings changing between render and tap, the sentence and query a scanned term, a tapped
-kanji, and a kanji reached through a headword link each get, and the image and clipboard text
-requests a tap makes, including cancelled and denied images, through `FakeActionContext`, a fake
-host). All pure-logic classes (the template
-engine, the glossary converter, the CSS scoping, the tag-text utility) have plain JUnit coverage
-with no Android dependency; everything touching `Context`/SharedPreferences/the service class uses
-Robolectric. All of these run on the JVM.
+kanji, and a kanji reached through a headword link each get, and the sentence readings, image, and
+clipboard text requests a tap makes, including cancelled and denied images, through `FakeActionContext`,
+a fake host). All pure-logic classes (the template engine, the glossary converter, the CSS scoping,
+the tag-text utility) have plain JUnit coverage with no Android dependency; everything touching
+`Context`/SharedPreferences/the service class uses Robolectric. All of these run on the JVM.
 
 `app/src/androidTest/.../anki/AnkiDroidDeviceTest.kt` runs against the AnkiDroid installed on a
 device. It checks that AnkiDroid accepts the duplicate check's SQL and that it finds what it

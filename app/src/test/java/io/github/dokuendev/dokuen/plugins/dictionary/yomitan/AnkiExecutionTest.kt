@@ -27,6 +27,8 @@ import io.github.dokuendev.dokuenreader.dictionary.DictionaryException
 import io.github.dokuendev.dokuenreader.dictionary.DictionaryResult
 import io.github.dokuendev.dokuenreader.dictionary.ImageRequestResult
 import io.github.dokuendev.dokuenreader.dictionary.ImageRequestSource
+import io.github.dokuendev.dokuenreader.dictionary.RubySpan
+import io.github.dokuendev.dokuenreader.dictionary.WordReading
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -160,11 +162,18 @@ class AnkiExecutionTest {
         ).thenReturn(duplicates)
     }
 
-    private suspend fun newService(settings: AnkiSettings, client: AnkiDroidClient): YomitanDictionaryPluginService {
+    private suspend fun newService(
+        settings: AnkiSettings,
+        client: AnkiDroidClient,
+        language: String? = null
+    ): YomitanDictionaryPluginService {
         AnkiSettingsStore.save(app, settings)
         val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
         service.ankiDroidClient = client
-        service.onInitialize(Bundle().apply { putString(PluginHostConfigKeys.UI_THEME, "light") })
+        service.onInitialize(Bundle().apply {
+            putString(PluginHostConfigKeys.UI_THEME, "light")
+            language?.let { putString(PluginHostConfigKeys.LANGUAGE, it) }
+        })
         return service
     }
 
@@ -972,6 +981,165 @@ class AnkiExecutionTest {
     private suspend fun followLink(service: YomitanDictionaryPluginService, link: String): DictionaryResult {
         val target = link.removePrefix("lookup:")
         return service.onLookup(target, 0, target.length)
+    }
+
+    private val furiganaFormat = format(
+        fields = mapOf(
+            "Front" to AnkiField(value = "{sentence-furigana-plain}"),
+            "Back" to AnkiField(value = "{sentence-furigana}")
+        )
+    )
+
+    /** Dokuen's readings of 冷たい水入りの瓶。: 冷たい / 水入り / の / 瓶 / 。 */
+    private fun sentenceReadings(): List<WordReading> = listOf(
+        wordReading(0, 3, 0 to 1 to "つめ"),
+        wordReading(3, 6, 3 to 4 to "みず", 4 to 5 to "い"),
+        wordReading(6, 7),
+        wordReading(7, 8, 7 to 8 to "びん"),
+        wordReading(8, 9)
+    )
+
+    private fun wordReading(start: Int, end: Int, vararg ruby: Pair<Pair<Int, Int>, String>) = WordReading().apply {
+        startIndex = start
+        endIndex = end
+        this.ruby = ruby.map { (range, text) ->
+            RubySpan().apply { startIndex = range.first; endIndex = range.second; rubyText = text }
+        }.toTypedArray()
+    }
+
+    private suspend fun scannedPayload(
+        service: YomitanDictionaryPluginService,
+        contextText: String = "冷たい水入りの瓶。次の文。"
+    ) =
+        addPayloads(scan(service, contextText, "水入り").entries.single { it.headword == "水入り" }).single()
+
+    @Test
+    fun sentenceFuriganaIsRequestedBeforeTheDuplicateSearchAndRendered() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(furiganaFormat), client)
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertEquals(listOf("冷たい水入りの瓶。"), context.readingsRequests)
+        val plain = "冷[つめ]たい 水[みず] 入[い]りの 瓶[びん]。"
+        verify(client).findDuplicateNotes(any(), any(), eq(plain), any<AnkiDuplicateScope>(), any())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals(
+            listOf(
+                plain,
+                "<span class=\"term\"><ruby>冷<rt>つめ</rt></ruby>たい</span>" +
+                        "<span class=\"term\"><ruby>水<rt>みず</rt></ruby><ruby>入<rt>い</rt></ruby>り</span>" +
+                        "<span class=\"term\">の</span><span class=\"term\"><ruby>瓶<rt>びん</rt></ruby></span>" +
+                        "<span class=\"term\">。</span>"
+            ),
+            fieldsCaptor.firstValue
+        )
+    }
+
+    @Test
+    fun noReadingsFallBackToThePlainSentence() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(furiganaFormat), client)
+        val context = FakeActionContext()
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertEquals(1, context.readingsRequests.size)
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals(listOf("冷たい水入りの瓶。", "冷たい水入りの瓶。"), fieldsCaptor.firstValue)
+    }
+
+    @Test
+    fun noReadingsRequestWithoutTheMarkersInTheNoteTypesFields() = runBlocking<Unit> {
+        val withOldField = format(
+            fields = mapOf(
+                "Front" to AnkiField(value = "{expression}"),
+                "Back" to AnkiField(value = "{reading}"),
+                "Gone" to AnkiField(value = "{sentence-furigana}")
+            )
+        )
+        val service = newService(settings(withOldField), mockClient())
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+    }
+
+    @Test
+    fun noReadingsRequestWithoutASentence() = runBlocking<Unit> {
+        val service = newService(settings(furiganaFormat), mockClient())
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        // A lookup through a link has no sentence.
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single(), context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+    }
+
+    @Test
+    fun noReadingsRequestOutsideJapaneseSessions() = runBlocking<Unit> {
+        val client = mockClient()
+        val service = newService(settings(furiganaFormat), client, language = "zh")
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals(listOf("冷たい水入りの瓶。", "冷たい水入りの瓶。"), fieldsCaptor.firstValue)
+    }
+
+    @Test
+    fun noReadingsRequestForASentenceOverTheLimit() = runBlocking<Unit> {
+        // 𠀋 is two UTF-16 code units, so the sentence the scan extent allows exceeds 500 of them.
+        val longContext = "𠀋".repeat(300) + "水入り" + "𠀋".repeat(300) + "。"
+        val service = newService(settings(furiganaFormat), mockClient())
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        service.executeAction(scannedPayload(service, longContext), context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+    }
+
+    @Test
+    fun readingsAreAskedForOnceAndReusedByLaterTaps() = runBlocking<Unit> {
+        val service = newService(settings(furiganaFormat, behavior = AnkiDuplicateBehavior.ALWAYS_ADD), mockClient())
+        val context = FakeActionContext(readings = { sentenceReadings() })
+        val payload = scannedPayload(service)
+
+        service.executeAction(payload, context)
+        service.executeAction(payload, context)
+
+        assertEquals(1, context.readingsRequests.size)
+    }
+
+    @Test
+    fun noReadingsAreAskedForAgainOnTheNextTap() = runBlocking<Unit> {
+        val service = newService(settings(furiganaFormat, behavior = AnkiDuplicateBehavior.ALWAYS_ADD), mockClient())
+        val context = FakeActionContext()
+        val payload = scannedPayload(service)
+
+        service.executeAction(payload, context)
+        service.executeAction(payload, context)
+
+        assertEquals(2, context.readingsRequests.size)
+    }
+
+    @Test
+    fun readingsAreRequestedBeforeImagesAndClipboardText() = runBlocking<Unit> {
+        val client = mockClient().also { stubAddImage(it) }
+        val format = imageFormat(picture = "{screenshot}{clipboard-text}{sentence-furigana}")
+        val service = newService(settings(format), client)
+        val context = FakeActionContext(readings = { sentenceReadings() }, clipboardText = "copied")
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertEquals(listOf("readings", "image:SCREENSHOT", "text"), context.log)
     }
 
     @Test

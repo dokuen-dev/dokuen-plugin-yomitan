@@ -61,11 +61,15 @@ object AnkiTemplateEngine {
         // escapes the value and turns each line break into `<br>` plus the line break.
         "clipboard-text" to { d -> d.clipboardText?.let { escape(it).replace("\n", "<br>\n") } ?: "" },
         "sentence" to { d -> d.cloze?.sentence ?: "" },
-        // No furigana source is available yet (see docs/anki-export.md), so these print the
-        // plain sentence, which is what the original's partials print when their furigana
-        // data is missing.
-        "sentence-furigana" to { d -> d.cloze?.sentence ?: "" },
-        "sentence-furigana-plain" to { d -> d.cloze?.sentence ?: "" },
+        // The original's createFuriganaHtml and createFuriganaPlain over the sentence's parsed
+        // text, printed unescaped. Without furigana (none requested, or none given) they print the
+        // plain sentence, as the original's partials do when their furigana data is missing.
+        AnkiSentenceFurigana.HTML_MARKER to { d ->
+            d.sentenceFurigana?.let { sentenceFuriganaHtml(it, readingOverride(d)) } ?: d.cloze?.sentence ?: ""
+        },
+        AnkiSentenceFurigana.PLAIN_MARKER to { d ->
+            d.sentenceFurigana?.let { sentenceFuriganaPlain(it, readingOverride(d)) } ?: d.cloze?.sentence ?: ""
+        },
         "cloze-prefix" to { d -> d.cloze?.prefix ?: "" },
         "cloze-body" to { d -> d.cloze?.body ?: "" },
         "cloze-body-kana" to { d -> d.cloze?.bodyKana ?: "" },
@@ -160,6 +164,52 @@ object AnkiTemplateEngine {
             }
         }
         return sb.toString()
+    }
+
+    /**
+     * The original's getReading override: for a term note, a segment whose text is the note's term
+     * shows the note's reading, if it has one. The original takes the term and reading from
+     * getDictionaryEntryDetailsForNote, which for a grouped entry's single headword are its
+     * expression and reading.
+     */
+    private fun readingOverride(d: AnkiNoteData): Pair<String, String>? =
+        if (d.type == AnkiEntryType.TERM && d.reading.isNotEmpty()) d.expression to d.reading else null
+
+    private fun segmentReading(segment: AnkiFuriganaSegment, override: Pair<String, String>?): String =
+        if (override != null && segment.text == override.first) override.second else segment.reading
+
+    /**
+     * The original's createFuriganaHtml. Its partials pass no reading mode, so readings are not
+     * converted.
+     */
+    private fun sentenceFuriganaHtml(terms: List<List<AnkiFuriganaSegment>>, override: Pair<String, String>?): String {
+        val sb = StringBuilder()
+        for (term in terms) {
+            sb.append("<span class=\"term\">")
+            for (segment in term) {
+                if (segment.reading.isNotEmpty()) {
+                    sb.append("<ruby>").append(segment.text)
+                        .append("<rt>").append(segmentReading(segment, override)).append("</rt></ruby>")
+                } else {
+                    sb.append(segment.text)
+                }
+            }
+            sb.append("</span>")
+        }
+        return sb.toString()
+    }
+
+    /** The original's createFuriganaPlain: ` TEXT[READING]` per reading, leading whitespace trimmed. */
+    private fun sentenceFuriganaPlain(terms: List<List<AnkiFuriganaSegment>>, override: Pair<String, String>?): String {
+        val sb = StringBuilder()
+        for (segment in terms.flatten()) {
+            if (segment.reading.isNotEmpty()) {
+                sb.append(' ').append(segment.text).append('[').append(segmentReading(segment, override)).append(']')
+            } else {
+                sb.append(segment.text)
+            }
+        }
+        return sb.toString().trimStart()
     }
 
     /** The original's mergeTags helper in group mode: headword tags, then each definition's tags. */

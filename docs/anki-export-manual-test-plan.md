@@ -586,7 +586,7 @@ says otherwise; the checks also give the exact value wherever it is known in adv
 | C2.17 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix`, `cloze-body-kana`, `search-query` | T8 | See C4.1. |
 | C2.18 | `search-query` | T1 | `食べる` on both. |
 | C2.19 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix`, `cloze-body-kana` | T1 to T7 | Identical on both; the exact values are C4.4. |
-| C2.20 | `sentence-furigana`, `sentence-furigana-plain` | all | On the plugin, each is exactly the note's own `sentence` field (empty when that is empty). Desktop's carries readings (`<ruby>` in `sentence-furigana`, `word[reading]` text in `sentence-furigana-plain`): the known deferral (see "Sentence furigana is not implemented" under Known limitations in `anki-export.md`), not a finding. |
+| C2.20 | `sentence-furigana`, `sentence-furigana-plain` | all | On both, each is identical apart from the `<span class="term">` boundaries in `sentence-furigana`, which follow each platform's own word segmentation (see "Deliberate differences" in `anki-export.md`). A reading that differs is a finding to check against that section: Dokuen's furigana can legitimately differ from desktop's dictionaries. |
 | C2.21 | `audio`, `popup-selection-text`, `url`, `document-title`, `phonetic-transcriptions`, `pitch-accents`, `pitch-accent-graphs`, `pitch-accent-graphs-jj`, `pitch-accent-positions`, `pitch-accent-categories` | all | Empty on the plugin: the markers have no backing subsystem yet, a documented scope boundary. Desktop may fill some of them, depending on its own state (configured audio sources), so desktop's values are recorded, not compared. |
 | C2.22 | every other field | all | Identical on both. |
 | C2.23 | `screenshot`, `clipboard-image`, `clipboard-text` | all | Recorded on both, not compared: each platform fills them from its own screen and clipboard when the note is added. Phase 13 checks them by hand. |
@@ -605,7 +605,7 @@ platforms.
 
 - **C4.1** On both: `sentence` = `電車が動き出す前に座った。`, `cloze-prefix` = `電車が`, `cloze-body` = `動き出す`, `cloze-suffix` = `前に座った。`, `cloze-body-kana` = `うごきだす`, `search-query` = `動き出す` (the scanned text cut to the longest match).
 - **C4.2** Neither `雨が降っていた。` nor `窓の外は暗かった。` appears in any field of either T8 note.
-- **C4.3** On the plugin, `sentence-furigana` and `sentence-furigana-plain` are both exactly `電車が動き出す前に座った。`, with no `<ruby>` and no `[...]`.
+- **C4.3** On the plugin, `sentence-furigana` has `<ruby>` and `sentence-furigana-plain` has `[...]` readings, and both match desktop as C2.20 describes.
 - **C4.4** T1 to T7 and T6b, each scanned from a line of its own: on both, `sentence` is the line (the scanned text and `。`), `cloze-prefix` is empty, `cloze-body` and `search-query` are the scanned text, `cloze-suffix` is `。`, and `cloze-body-kana` is the scanned text's kana: T1 `たべる`, T2 `うごきだす`, T3 `おみまい`, T4 `たべさせられた` (scanned as 食べさせられた), T5 `ぎゅう`, T6 and T6b `きょうと`, T7 `がくしゅうじてん`.
 
 ### C5. Definitions from two dictionaries (T6, T6b)
@@ -691,7 +691,8 @@ example `#565656` becomes `rgb(86, 86, 86)`) and normalizes whitespace, and the 
 
 Every field written by this feature should match desktop exactly, with these known, accepted
 exceptions: the markers that still resolve to empty (audio, pitch accents, phonetic
-transcriptions, page context), the screenshot and clipboard fields (C2.23), sentence furigana,
+transcriptions, page context), the screenshot and clipboard fields (C2.23), the term boundaries of
+`sentence-furigana` (C2.20),
 `part-of-speech`, the conjugation names in `conjugation` (C2.9), glossary images (the plugin stores
 no dictionary media, C7.5), and the value spelling
 and whitespace of the CSS in the glossary's `<style>` elements (C7). Any other difference is a new finding.
