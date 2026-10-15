@@ -137,6 +137,58 @@ class MainViewModelTest {
     }
 
     @Test
+    fun testMetaOnlyDictionariesReportMetaEntryCounts() = runBlocking {
+        val termFreqDict = DictionaryEntity(
+            title = "A Term Freq", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":1234,"freq":1234},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        val kanjiFreqDict = DictionaryEntity(
+            title = "B Kanji Freq", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":0},"kanji":{"total":0},"kanjiMeta":{"total":1,"freq":1},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        val pitchDict = DictionaryEntity(
+            title = "C Pitch", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true,
+            counts = """{"terms":{"total":0},"termMeta":{"total":5,"pitch":5},"kanji":{"total":0},"kanjiMeta":{"total":0},"tagMeta":{"total":0},"media":{"total":0}}"""
+        )
+        val legacyMetaDict = DictionaryEntity(
+            title = "D Legacy Meta", revision = "1.0", sequenced = false, version = 3,
+            importDate = System.currentTimeMillis(), prefixWildcardsSupported = true,
+            styles = "", importSuccess = true, counts = null
+        )
+        withContext(Dispatchers.IO) {
+            db.dictionaryDao().insertDictionary(termFreqDict)
+            db.dictionaryDao().insertDictionary(kanjiFreqDict)
+            db.dictionaryDao().insertDictionary(pitchDict)
+            db.dictionaryDao().insertDictionary(legacyMetaDict)
+            db.termMetaDao().bulkAdd(
+                listOf(
+                    TermMetaEntity(
+                        dictionary = "D Legacy Meta",
+                        expression = "単語",
+                        mode = "freq",
+                        data = "1"
+                    )
+                )
+            )
+        }
+
+        val viewModel = MainViewModel(app)
+        waitForLoaded(viewModel)
+
+        val countTexts = viewModel.uiState.value.installedDictionaries.associate { it.meta.title to it.countText }
+        assertEquals("1,234 frequency entries imported", countTexts["A Term Freq"])
+        assertEquals("1 frequency entry imported", countTexts["B Kanji Freq"])
+        assertEquals("5 metadata entries imported", countTexts["C Pitch"])
+        assertEquals("1 metadata entry imported", countTexts["D Legacy Meta"])
+    }
+
+    @Test
     fun testDeleteDictionary() = runBlocking {
         val dict = DictionaryEntity(
             title = "ToDelete Dict",

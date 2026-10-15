@@ -201,6 +201,14 @@
         <item quantity="one">%1$,d term imported</item>
         <item quantity="other">%1$,d terms imported</item>
     </plurals>
+    <plurals name="frequency_entries_imported">
+        <item quantity="one">%1$,d frequency entry imported</item>
+        <item quantity="other">%1$,d frequency entries imported</item>
+    </plurals>
+    <plurals name="meta_entries_imported">
+        <item quantity="one">%1$,d metadata entry imported</item>
+        <item quantity="other">%1$,d metadata entries imported</item>
+    </plurals>
 
     <!-- Service / Importer Exception messages -->
     <string name="error_no_dictionaries_enabled">No dictionaries have been installed or enabled yet.</string>

@@ -139,14 +139,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     for (meta in sortedMetas) {
                         var termCount = 0L
                         var kanjiCount = 0L
+                        var metaCount = 0L
+                        var metaFreqCount = 0L
                         var countsLoaded = false
 
                         val countsJson = meta.counts
                         if (!countsJson.isNullOrEmpty()) {
                             try {
                                 val json = Json.parseToJsonElement(countsJson).jsonObject
-                                termCount = json["terms"]?.jsonObject?.get("total")?.jsonPrimitive?.longOrNull ?: 0L
-                                kanjiCount = json["kanji"]?.jsonObject?.get("total")?.jsonPrimitive?.longOrNull ?: 0L
+                                fun count(section: String, key: String) =
+                                    json[section]?.jsonObject?.get(key)?.jsonPrimitive?.longOrNull ?: 0L
+                                termCount = count("terms", "total")
+                                kanjiCount = count("kanji", "total")
+                                metaCount = count("termMeta", "total") + count("kanjiMeta", "total")
+                                metaFreqCount = count("termMeta", "freq") + count("kanjiMeta", "freq")
                                 countsLoaded = true
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error parsing cached counts for ${meta.title}", e)
@@ -156,9 +162,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         if (!countsLoaded) {
                             termCount = dao.countTerms(meta.title)
                             kanjiCount = dao.countKanji(meta.title)
+                            // The meta count only shows when there are no terms or kanji, so
+                            // the two table scans are skipped otherwise.
+                            // Without cached counts the per-mode breakdown is unknown, so
+                            // metaFreqCount stays 0 and the generic wording is used.
+                            if (termCount == 0L && kanjiCount == 0L) {
+                                metaCount = dao.countTermMeta(meta.title) + dao.countKanjiMeta(meta.title)
+                            }
                         }
 
-                        val countText = if (termCount == 0L && kanjiCount > 0L) {
+                        // Frequency, pitch accent, and similar dictionaries ship only
+                        // term_meta/kanji_meta banks, so they have no terms or kanji to report.
+                        val countText = if (termCount == 0L && kanjiCount == 0L && metaCount > 0L) {
+                            getApplication<Application>().resources.getQuantityString(
+                                if (metaFreqCount == metaCount) {
+                                    R.plurals.frequency_entries_imported
+                                } else {
+                                    R.plurals.meta_entries_imported
+                                },
+                                metaCount.toInt(),
+                                metaCount
+                            )
+                        } else if (termCount == 0L && kanjiCount > 0L) {
                             getApplication<Application>().resources.getQuantityString(
                                 R.plurals.kanji_imported,
                                 kanjiCount.toInt(),
