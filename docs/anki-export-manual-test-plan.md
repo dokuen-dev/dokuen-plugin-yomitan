@@ -53,10 +53,14 @@ Already installed (this plan does not cover installing them): on desktop, Anki w
 add-on, Python 3, `adb`, a checkout of this repository with what its README lists for building it,
 and a browser with Yomitan (scanning with **Shift**, its default) and the five dictionaries of R3
 imported; on Android, AnkiDroid (from the Play Store, first-run setup done), the host app
-(`dokuen-android`) with Dokuen Pro, and this plugin with the five dictionaries of R3 imported,
-enabled in R3's order (Up/Down arrows), no other dictionary enabled, and no sort dictionary chosen.
-Dokuen Pro is needed because `AuditTerm` has `screenshot` and `clipboard-image` fields: without it,
-every add also shows a message that those fields were left empty, which the steps do not expect.
+(`dokuen-android`), and this plugin with the five dictionaries of R3 imported, enabled in R3's
+order (Up/Down arrows), no other dictionary enabled, and no sort dictionary chosen.
+
+The plan runs with or without Dokuen Pro, and Phase 13 has steps for each. Without it, Dokuen
+leaves the `screenshot` and `clipboard-image` fields of `AuditTerm` empty, and every add also shows
+a message saying so, after any message a step expects. Note which of the two this run is. On a
+device where Dokuen Pro can be turned on, start without it: 13.3 turns it on for the steps that
+need it.
 
 - [ ] **1.1** Desktop: start Anki.
 - [ ] **1.2** Desktop: in Yomitan's settings, **Backup** → **Export settings**. Note where the file is saved.
@@ -124,7 +128,7 @@ difference.
 - [ ] **6.5** **Check for duplicates across all models**: a toggle on both, shown while **Check for card duplicates** is on. Confirm both label it **Check for duplicates across all models**.
 - [ ] **6.6** **Duplicate card scope**: confirm both offer **Collection**, **Deck**, and **Deck root**, worded the same.
 - [ ] **6.7** **When a duplicate is detected**: confirm both offer **Prevent adding**, **Allow overwriting**, and **Allow adding**, worded the same.
-- [ ] **6.8** **Screenshot format and quality**: on desktop, under advanced settings. Confirm the plugin has no equivalent.
+- [ ] **6.8** **Screenshot format and quality**: on desktop, under advanced settings. Confirm the plugin has them in the **Anki Export** tab's **Images** card: an **Image format** menu offering **PNG** and **JPEG**, and a JPEG quality slider, shown only while **JPEG** is chosen. Leave the format at **PNG**.
 - [ ] **6.9** **Idle download timeout**: on desktop, under advanced settings. Confirm the plugin has no equivalent.
 - [ ] **6.10** **Suspend new cards**: on desktop, under advanced settings. Confirm the plugin has no equivalent.
 - [ ] **6.11** **Note viewer window** (Browse or Edit): a choice on desktop. Confirm the plugin has no equivalent.
@@ -185,10 +189,10 @@ The same notes on the plugin, in the same order, scanning the test page in Chrom
 - [ ] **8.7** Scan `学習辞典`. Add 学習辞典【がくしゅうじてん】 via `AuditVocab`.
 - [ ] **8.8** Scan `時雨`. Add 時雨【しぐれ】 (not 時雨【じう】) via `AuditVocab`.
 - [ ] **8.9** Scan `鳥居`. Add 鳥居【とりい】 via `AuditVocab`.
-- [ ] **8.10** Scan `千鳥`. Confirm the scan read `鳥`, not `島`, and that the entry's reading is ちどり. If not, correct the misread character with Dokuen's OCR repair feature and look it up again. Add 千鳥【ちどり】 via `AuditVocab`.
+- [ ] **8.10** Scan `千鳥`. Confirm the scan read `鳥`, not `島`, and that the entry's reading is ちどり. If not, correct the misread character with the dictionary window's **Repair** button, as in 8.13. Add 千鳥【ちどり】 via `AuditVocab`.
 - [ ] **8.11** Scan `順路`. Add 順路【じゅんろ】 via `AuditVocab`.
 - [ ] **8.12** Scan `記号`. Add 記号【きごう】 via `AuditVocab`.
-- [ ] **8.13** Scan `學校`. Confirm the result shows the same entries, in the same order, as you wrote down in 7.13; any difference is a finding. Add the entry whose headword is `學校` via `AuditVocab`.
+- [ ] **8.13** Scan `學校`. Dokuen's OCR often reads `學` as `学`, which makes the result one for `学校`. If it does, correct it with the dictionary window's **Repair** button: tap the misread character's box, replace the character with `學` (choose it from the suggestions if they offer it, and otherwise type or paste it), and tap **Confirm**, which looks `學校` up. Confirm the result shows the same entries, in the same order, as you wrote down in 7.13; any difference is a finding. Add the entry whose headword is `學校` via `AuditVocab`.
 - [ ] **8.14** Scan `食べる`. Tap `食` in the 食べる【たべる】 entry's headword. Add the 食 kanji entry via `AuditKanjiFmt`.
 - [ ] **8.15** In the test page's paragraph, use Dokuen to select exactly `動き出す` (the four characters, nothing before or after) in the middle sentence. Add 動き出す【うごきだす】 via `AuditVocab`.
 - [ ] **8.16** In the same result, tap `動` in the 動き出す【うごきだす】 entry's headword. Add the 動 kanji entry via `AuditKanjiFmt`.
@@ -198,9 +202,9 @@ The same notes on the plugin, in the same order, scanning the test page in Chrom
 - [ ] **8.20** Scan `食べる`. Add 食べる【たべる】 via `AuditVocab`.
 - [ ] **8.21** Hide the overlay. In the **Anki Export** tab, clear **Card tags** so it is empty, and press **Done**.
 - [ ] **8.22** Scan `食べる`. Add 食べる【たべる】 via `AuditBadMarker`. Confirm the note is added: the link reads **Added: AuditBadMarker**, and the host also shows the message `Note added to Anki, but card format "AuditBadMarker" uses unknown marker(s): {expresion}` in its own message area. Compare it with desktop's message in 7.20: the general shape should match, not the wording or where it is shown.
-- [ ] **8.23** Hide the overlay. In the plugin's **Dictionaries** tab, use the arrows to move `JMnedict [2026-09-25]` above `Jitendex.org [2026-05-05]`.
+- [ ] **8.23** Hide the overlay. In the plugin's **Dictionaries** tab, use the arrows to move `JMnedict [2026-09-25]` above `Jitendex.org [2026-05-05]`. Then stop Dokuen's session and start a new one (**Stop**, then **Start**, on Dokuen's main page), because the plugin reads the dictionary order when a session starts.
 - [ ] **8.24** Scan `京都`. Confirm the 京都【きょうと】 entry now shows JMnedict's definition first. Add 京都【きょうと】 via `AuditVocab`.
-- [ ] **8.25** Hide the overlay. In **Dictionaries**, move `Jitendex.org [2026-05-05]` back above `JMnedict [2026-09-25]`. Confirm the order is Jitendex, JMnedict, KANJIDIC, JPDBv2㋕, BCCWJ.
+- [ ] **8.25** Hide the overlay. In **Dictionaries**, move `Jitendex.org [2026-05-05]` back above `JMnedict [2026-09-25]`. Confirm the order is Jitendex, JMnedict, KANJIDIC, JPDBv2㋕, BCCWJ. Stop Dokuen's session and start a new one, as in 8.23.
 
 ## Phase 9: Duplicate detection (Android)
 
@@ -270,18 +274,25 @@ new note. To look at the newest note's fields, search `猫` in AnkiDroid's card 
 last note in its note editor. The image settings are in the plugin's **Anki Export** tab, **Images**
 card; hide Dokuen's overlay to change them, as for every plugin setting.
 
-- [ ] **13.1** Plugin: confirm the **Images** card shows "{screenshot} behavior" **Full screen** and image format **PNG**, with no JPEG quality slider. In any app, copy some text (not an image). Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears and the link reads **Added: AuditVocab**. In AnkiDroid, confirm the new note's `screenshot` field shows the whole screen Dokuen scanned and its `clipboard-image` field is empty.
-- [ ] **13.2** Plugin: set "{screenshot} behavior" to **Show crop UI**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm Dokuen's crop UI opens, titled with the plugin's name. Crop to a part of the screen and confirm. In AnkiDroid, confirm the new note's `screenshot` field shows just that part.
-- [ ] **13.3** Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, choose an image file instead. In AnkiDroid, confirm the new note's `screenshot` field shows that file's image.
-- [ ] **13.4** Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, continue without an image. Confirm the link reads **Added: AuditVocab**, and in AnkiDroid that the new note's `screenshot` field is empty.
-- [ ] **13.5** In AnkiDroid, count the `猫` notes. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, cancel. Confirm, in AnkiDroid, that the number of `猫` notes is unchanged.
-- [ ] **13.6** Plugin: set "{screenshot} behavior" to **Full screen**, image format **JPEG**, and JPEG quality **50**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `screenshot` field shows a `.jpg` file (the note editor's HTML view shows the file name; AnkiDroid stores JPEG as `.jpg`) that looks visibly compressed. Set the image format back to **PNG**.
-- [ ] **13.7** Copy an image (for example, in Chrome, long-press an image and choose **Copy image**). Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-image` field shows that image, as a `.png` file, and that its `clipboard-text` field is empty. Plugin: set the image format to **JPEG**, scan `猫` and add 猫【ねこ】 via `AuditVocab` again, and confirm the new `clipboard-image` file is still `.png`. Set the image format back to **PNG**.
-- [ ] **13.8** In a text editor app (for example Google Keep), type the two lines `<b>bold</b>` and `second line`, select both, and copy them. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-text` field shows both lines, one below the other, with `<b>bold</b>` shown as typed rather than in bold, and that its `clipboard-image` field is empty.
-- [ ] **13.9** Plugin: set "{screenshot} behavior" to **Show crop UI** and "When a duplicate is detected" to **Prevent adding**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm "This note already exists in Anki." and that no crop UI appeared.
-- [ ] **13.10** Plugin: set **Allow overwriting**, and in `AuditVocab`, set the `screenshot` field's overwrite mode to **Skip**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no crop UI appears and the link reads **Overwritten: AuditVocab**. In AnkiDroid, confirm the first `猫` note (the one from 13.1) still shows its screenshot.
-- [ ] **13.11** If a Dokuen account or build without Dokuen Pro is available, switch to it (otherwise skip this step). Plugin: set **Allow adding** and "{screenshot} behavior" **Full screen**. Copy some text. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears, the link reads **Added: AuditVocab**, and the message reads `Note added successfully, but with empty {screenshot} and {clipboard-image} fields (images require Dokuen Pro).` In AnkiDroid, confirm the new note's `screenshot` and `clipboard-image` fields are empty and its `clipboard-text` field holds the copied text. Switch back to Dokuen Pro.
-- [ ] **13.12** Desktop: in the setup script's window, press **Enter** to stop serving the test page.
+A step marked "(Dokuen Pro only)" needs Dokuen Pro, and one marked "(without Dokuen Pro only)"
+needs a device without it: skip each on the other kind of device. Steps with neither mark are for
+both. The steps that need Dokuen Pro come last, after 13.3, so that on a device where Dokuen Pro
+can be turned on, the plan is done once without it, and only those steps are done with it.
+
+- [ ] **13.1** (without Dokuen Pro only) Plugin: set **Allow adding** and "{screenshot} behavior" **Full screen**. Copy some text. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears, the link reads **Added: AuditVocab**, and the message reads `Note added successfully, but with empty {screenshot} and {clipboard-image} fields (images require Dokuen Pro).` In AnkiDroid, confirm the new note's `screenshot` and `clipboard-image` fields are empty and its `clipboard-text` field holds the copied text.
+- [ ] **13.2** In a text editor app (for example Google Keep), type the two lines `<b>bold</b>` and `second line`, select both, and copy them. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-text` field shows both lines, one below the other, with `<b>bold</b>` shown as typed rather than in bold, and that its `clipboard-image` field is empty.
+- [ ] **13.3** If this device has Dokuen Pro, go on to 13.4. If it does not, but Dokuen Pro can be turned on for it (for example, by signing in to an account that has it), turn it on now and go on to 13.4. Nothing before this step needs to be done again with it. Otherwise, skip to 13.14.
+- [ ] **13.4** (Dokuen Pro only) Stop Dokuen's session and start a new one (**Stop**, then **Start**, on Dokuen's main page). In AnkiDroid, delete every `猫` note (in the card browser, with **All decks** chosen, search `猫`), so that the steps below find only the notes they add.
+- [ ] **13.5** (Dokuen Pro only) Plugin: confirm the **Images** card shows "{screenshot} behavior" **Full screen** and image format **PNG**, with no JPEG quality slider. In any app, copy some text (not an image). Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no Dokuen UI appears and the link reads **Added: AuditVocab**. In AnkiDroid, confirm the new note's `screenshot` field shows the whole screen Dokuen scanned and its `clipboard-image` field is empty.
+- [ ] **13.6** (Dokuen Pro only) Plugin: set "{screenshot} behavior" to **Show crop UI**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm Dokuen's crop UI opens, titled with the plugin's name. Crop to a part of the screen and confirm. In AnkiDroid, confirm the new note's `screenshot` field shows just that part.
+- [ ] **13.7** (Dokuen Pro only) Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, choose an image file instead. In AnkiDroid, confirm the new note's `screenshot` field shows that file's image.
+- [ ] **13.8** (Dokuen Pro only) Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, continue without an image. Confirm the link reads **Added: AuditVocab**, and in AnkiDroid that the new note's `screenshot` field is empty.
+- [ ] **13.9** (Dokuen Pro only) In AnkiDroid, count the `猫` notes. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In the crop UI, cancel. Confirm, in AnkiDroid, that the number of `猫` notes is unchanged.
+- [ ] **13.10** (Dokuen Pro only) Plugin: set "{screenshot} behavior" to **Full screen**, image format **JPEG**, and JPEG quality **50**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `screenshot` field shows a `.jpg` file (the note editor's HTML view shows the file name; AnkiDroid stores JPEG as `.jpg`) that looks visibly compressed. Set the image format back to **PNG**.
+- [ ] **13.11** (Dokuen Pro only) Copy an image (for example, in Chrome, long-press an image and choose **Copy image**). Scan `猫` and add 猫【ねこ】 via `AuditVocab`. In AnkiDroid, confirm the new note's `clipboard-image` field shows that image, as a `.png` file, and that its `clipboard-text` field is empty. Plugin: set the image format to **JPEG**, scan `猫` and add 猫【ねこ】 via `AuditVocab` again, and confirm the new `clipboard-image` file is still `.png`. Set the image format back to **PNG**.
+- [ ] **13.12** (Dokuen Pro only) Plugin: set "{screenshot} behavior" to **Show crop UI** and "When a duplicate is detected" to **Prevent adding**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm "This note already exists in Anki." and that no crop UI appeared.
+- [ ] **13.13** (Dokuen Pro only) Plugin: set **Allow overwriting**, and in `AuditVocab`, set the `screenshot` field's overwrite mode to **Skip**. Scan `猫` and add 猫【ねこ】 via `AuditVocab`. Confirm no crop UI appears and the link reads **Overwritten: AuditVocab**. In AnkiDroid, confirm the first `猫` note (the one from 13.5) still shows its screenshot.
+- [ ] **13.14** Desktop: in the setup script's window, press **Enter** to stop serving the test page.
 
 ## Phase 14: Finish (Android)
 
@@ -406,7 +417,7 @@ words are from Jitendex unless noted.
 | 千鳥 | 7.10 / 8.10 | 千鳥【ちどり】 | An inline glyph image (C7). |
 | 順路 | 7.11 / 8.11 | 順路【じゅんろ】 | A literal `->` in an example sentence's translation (C7). |
 | 記号 | 7.12 / 8.12 | 記号【きごう】 | A literal `&` in an example sentence's translation (C7). |
-| 學校 | 7.13 / 8.13 | 學校 (old kanji form of 学校, no separate reading) | A redirect entry, whose second glossary item points at `学校` (C7). Its old form, 學, is a standard Traditional Chinese character, which OCR reads reliably. |
+| 學校 | 7.13 / 8.13 | 學校 (old kanji form of 学校, no separate reading) | A redirect entry, whose second glossary item points at `学校` (C7). Dokuen's OCR often reads its old form, 學, as 学, which 8.13 corrects with **Repair**. |
 | K1 | 7.14 / 8.14 | 食 (KANJIDIC), reached from 食べる【たべる】's headword | Kanji markers, and the sentence and query a kanji carries over from the term it was reached from. (A scan of `食` alone shows the term 食【しょく】, not the kanji, on the plugin.) |
 | T8 | 7.15 / 8.15 | 動き出す【うごきだす】, scanned in the test page's paragraph (R5) | `sentence`, the cloze markers, and `search-query` (C4). |
 | K2 | 7.16 / 8.16 | 動 (KANJIDIC), reached from T8's headword | A kanji that carries the term's sentence (C6). |
@@ -466,7 +477,8 @@ The plugin's steps select the whole word rather than tapping one character, so t
 `{search-query}` are the same whether the host looks up only the selected text or reads on from
 the start of the selection; desktop's scan from the word's first character gives the same result.
 The plugin's lookups go through the host's OCR: if Dokuen's selection does not show exactly the
-word's characters (an OCR misreading), zoom the page in and select again.
+word's characters (an OCR misreading), zoom the page in and select again, or correct the
+characters with the dictionary window's **Repair** button, as 8.10 and 8.13 do.
 
 ## R6. The scripts
 
@@ -488,7 +500,7 @@ session is restarted after the check (10.3).
 5. Resets the plugin's Anki settings to the defaults, so that Phase 3 starts from them and Phase 5 from the three default formats.
 6. Checks the plugin's dictionaries: the five of R3, at exactly those revisions, enabled in exactly that order, nothing else enabled, and no sort dictionary.
 7. Writes `yomitan-settings-anki-test-plan.json`: the settings exported in 1.2, with desktop's dictionaries set up the same way (the five enabled in order, every other one disabled), frequency sorting off, duplicate checking on with scope Collection, not across models, and "Allow adding", and the 5 card formats of R2. It is imported in 4.1.
-8. Serves the test page (R5) and opens it in the desktop browser and in Chrome on the device, until Enter is pressed (13.12).
+8. Serves the test page (R5) and opens it in the desktop browser and in Chrome on the device, until Enter is pressed (13.14).
 
 **Check** (Phase 10) reads the plugin's stored Anki settings and every note in `AuditTest` (and its
 sub-deck) from both platforms, and makes every check of R8, reporting each under its ID with one

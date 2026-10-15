@@ -43,11 +43,13 @@ import json
 import os
 import re
 import shlex
+import struct
 import subprocess
 import sys
 import threading
 import urllib.request
 import webbrowser
+import zlib
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKAGE = 'io.github.dokuendev.dokuen.plugins.dictionary.yomitan'
@@ -109,12 +111,71 @@ PAGE_WORDS = ['食べる', '動き出す', 'お見舞い', '食べさせられ�
               '千鳥', '順路', '記号', '學校']
 TEST_PARAGRAPH = '雨が降っていた。電車が動き出す前に座った。窓の外は暗かった。'
 LATER_WORDS = ['椅子', '鉛筆', '手紙', '猫', '犬', 'かける']
+# Lets scripts/anki_test_plan_android.py find a word on the device's screen. Only the page in
+# Chrome on Android runs it: it polls the server for a command naming a line of the page and a
+# text in it, scrolls that line to the middle of the screen, and posts the position of each
+# character of the text back. A command can also enlarge the line, as a tester zooms in when the
+# OCR misreads a word (R5); the line's text, and so what a scan reads from it, stays the same.
+PAGE_SCRIPT = '''<script>
+(function () {
+  if (!/Android/.test(navigator.userAgent)) return;
+  var done = 0;
+  var enlarged = null;
+  function lineElement(line) {
+    return Array.prototype.filter.call(document.querySelectorAll('p'), function (p) {
+      return p.textContent === line;
+    })[0];
+  }
+  function characterRects(element, text) {
+    var node = element.firstChild;
+    var start = node.data.indexOf(text);
+    var rects = [];
+    for (var i = 0; i < text.length; i++) {
+      var range = document.createRange();
+      range.setStart(node, start + i);
+      range.setEnd(node, start + i + 1);
+      var rect = range.getBoundingClientRect();
+      rects.push([rect.left, rect.top, rect.right, rect.bottom]);
+    }
+    return rects;
+  }
+  function report(command) {
+    var element = lineElement(command.line);
+    var viewport = window.visualViewport || {scale: 1, offsetLeft: 0, offsetTop: 0};
+    var result = {id: command.id, found: !!element, dpr: window.devicePixelRatio, scale: viewport.scale,
+                  offsetLeft: viewport.offsetLeft, offsetTop: viewport.offsetTop};
+    if (element) result.rects = characterRects(element, command.text);
+    return fetch('/control/layout', {method: 'POST', body: JSON.stringify(result)});
+  }
+  function poll() {
+    fetch('/control/command?after=' + done).then(function (response) {
+      return response.status === 200 ? response.json() : null;
+    }).then(function (command) {
+      if (!command) return null;
+      done = command.id;
+      var element = lineElement(command.line);
+      if (enlarged) enlarged.style.fontSize = '';
+      enlarged = null;
+      if (element && command.scale > 1) {
+        element.style.fontSize = (32 * command.scale) + 'px';
+        enlarged = element;
+      }
+      if (element) element.scrollIntoView({block: 'center'});
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(report(command)); }, 400);
+      });
+    }).catch(function () {}).then(function () { setTimeout(poll, 250); });
+  }
+  poll();
+})();
+</script>
+'''
 PAGE_HTML = ('<!DOCTYPE html>\n<html lang="ja"><head><meta charset="utf-8">\n'
              '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
              '<title>Anki test page</title></head>\n'
-             '<body style="font-size: 32px; line-height: 1.6; margin: 24px;">\n%s<hr>\n<p>%s</p>\n<hr>\n%s</body></html>\n' % (
+             '<body style="font-size: 32px; line-height: 1.6; margin: 24px;">\n%s<hr>\n<p>%s</p>\n<hr>\n%s%s</body></html>\n' % (
                  ''.join('<p>%s。</p>\n' % word for word in PAGE_WORDS), TEST_PARAGRAPH,
-                 ''.join('<p>%s。</p>\n' % word for word in LATER_WORDS)))
+                 ''.join('<p>%s。</p>\n' % word for word in LATER_WORDS), PAGE_SCRIPT))
 OVERWRITE_WORD = '椅子'
 
 
@@ -271,7 +332,8 @@ def desktop_notes(url):
 
 def run_adb(adb, serial, args, binary=False):
     command = [adb] + (['-s', serial] if serial else []) + args
-    result = subprocess.run(command, capture_output=True)
+    # No input: adb shell would otherwise read what the tester types at the terminal.
+    result = subprocess.run(command, capture_output=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         raise RuntimeError('%s failed:\n%s' % (' '.join(command), result.stderr.decode('utf-8', 'replace')))
     return result.stdout if binary else result.stdout.decode('utf-8', 'replace')
@@ -1143,30 +1205,96 @@ def command_setup(args, folder):
     return command_serve(args, folder)
 
 
-def command_serve(args, folder):
-    step('Serving the test page')
+IMAGE_NAME = 'anki-test-image.png'
+
+
+def test_image_png(width=240, height=160):
+    """A small PNG of colored stripes, which step 13.11 copies in Chrome to put an image on the
+    clipboard."""
+    rows = b''.join(b'\x00' + b''.join(bytes((40 + (x // 30) * 25 % 200, 120, 200 - y)) for x in range(width))
+                    for y in range(height))
+
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+
+
+def start_page_server(port):
+    """Serves the test page on port, in a background thread, and returns the server.
+
+    Besides the page and an image for step 13.11 to copy (IMAGE_NAME), the server relays between
+    scripts/anki_test_plan_android.py and the page in Chrome on the device (see PAGE_SCRIPT):
+    POST /control/command takes {"line", "text", "scale"} and returns the command's {"id"}; the
+    page polls GET /control/command?after=<id> for a newer command and posts where the text is to
+    POST /control/layout, which GET /control/layout?id=<id> then returns.
+    """
     page = PAGE_HTML.encode('utf-8')
+    image = test_image_png()
+    state = {'command': None, 'layouts': {}}
+    lock = threading.Lock()
 
     class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path != '/' + PAGE_NAME:
-                self.send_error(404)
-                return
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.send_header('Content-Length', str(len(page)))
+        def reply(self, status, body=b'', content_type='application/json'):
+            self.send_response(status)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
             self.end_headers()
-            self.wfile.write(page)
+            self.wfile.write(body)
+
+        def do_GET(self):
+            path, _, query = self.path.partition('?')
+            number = int(query.split('=', 1)[1]) if '=' in query else 0
+            with lock:
+                if path == '/' + PAGE_NAME:
+                    self.reply(200, page, 'text/html; charset=utf-8')
+                elif path == '/' + IMAGE_NAME:
+                    self.reply(200, image, 'image/png')
+                elif path == '/control/command' and state['command'] and state['command']['id'] > number:
+                    self.reply(200, json.dumps(state['command']).encode('utf-8'))
+                elif path == '/control/layout' and number in state['layouts']:
+                    self.reply(200, json.dumps(state['layouts'][number]).encode('utf-8'))
+                elif path in ('/control/command', '/control/layout'):
+                    self.reply(204)
+                else:
+                    self.send_error(404)
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))).decode('utf-8'))
+            with lock:
+                if self.path == '/control/command':
+                    command_id = (state['command']['id'] if state['command'] else 0) + 1
+                    state['command'] = {'id': command_id, 'line': body['line'], 'text': body['text'],
+                                        'scale': body.get('scale', 1)}
+                    self.reply(200, json.dumps({'id': command_id}).encode('utf-8'))
+                elif self.path == '/control/layout':
+                    state['layouts'][body['id']] = body
+                    self.reply(204)
+                else:
+                    self.send_error(404)
 
         def log_message(self, *_):
             pass
 
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = 'http://localhost:%d/%s' % (args.port, PAGE_NAME)
-    run_adb(args.adb, args.serial, ['reverse', 'tcp:%d' % args.port, 'tcp:%d' % args.port])
-    run_adb(args.adb, args.serial, ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url,
-                                    '-p', 'com.android.chrome'])
+    return server
+
+
+def open_page_on_device(adb, serial, port):
+    """Makes the device reach the test page at localhost and opens it in Chrome."""
+    url = 'http://localhost:%d/%s' % (port, PAGE_NAME)
+    run_adb(adb, serial, ['reverse', 'tcp:%d' % port, 'tcp:%d' % port])
+    run_adb(adb, serial, ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url,
+                          '-p', 'com.android.chrome'])
+    return url
+
+
+def command_serve(args, folder):
+    step('Serving the test page')
+    server = start_page_server(args.port)
+    url = open_page_on_device(args.adb, args.serial, args.port)
     webbrowser.open(url)
     print('Opened %s in the desktop browser and in Chrome on the device.' % url)
     print('Leave this running until Phase 13 is done (every lookup scans this page), then press Enter.')

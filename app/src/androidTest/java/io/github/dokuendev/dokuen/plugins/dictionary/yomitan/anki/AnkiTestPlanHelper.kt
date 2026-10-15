@@ -155,6 +155,30 @@ class AnkiTestPlanHelper {
         write("setupCollection", JSONObject().put("decks", decks).put("models", models))
     }
 
+    /**
+     * Adds the note described by the "spec" argument (base64 of `{"model", "deck",
+     * "fields": {name: value}, "tags": [names]}`), with every field it does not name empty.
+     */
+    @Test
+    fun addNote() {
+        requireAction("addNote")
+        val spec = JSONObject(String(Base64.decode(argument("spec"), Base64.DEFAULT), Charsets.UTF_8))
+        val client = client()
+        val modelName = spec.getString("model")
+        val deckName = spec.getString("deck")
+        val modelId = client.getModelList().entries.firstOrNull { it.value == modelName }?.key
+        val deckId = client.getDeckList().entries.firstOrNull { it.value == deckName }?.key
+        assertTrue("No note type $modelName", modelId != null)
+        assertTrue("No deck $deckName", deckId != null)
+        val values = spec.getJSONObject("fields")
+        val fields = client.getFieldList(modelId!!).map { values.optString(it, "") }.toTypedArray()
+        val tagArray = spec.optJSONArray("tags") ?: JSONArray()
+        val tags = (0 until tagArray.length()).map { tagArray.getString(it) }.toSet()
+        val id = AddContentApi(context).addNote(modelId, deckId!!, fields, tags)
+        assertTrue("AnkiDroid did not add the note", id != null)
+        write("addNote", JSONObject().put("id", id))
+    }
+
     /** Removes the plugin's stored Anki settings, so it starts over from the defaults. */
     @Test
     fun resetAnkiSettings() {
