@@ -1,8 +1,8 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki
 
 /**
- * Which host-provided markers (images and clipboard text) a note write will actually use, so the
- * host is only asked for what ends up on the card.
+ * Which host-provided markers (images, clipboard text, and the sentence furigana) a note write
+ * will actually use, so the host is only asked for what ends up on the card.
  */
 object AnkiMediaNeeds {
     const val SCREENSHOT = "screenshot"

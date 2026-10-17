@@ -93,9 +93,12 @@ displayed result with what an `UpdateResult` carries, so the entries returned ar
 lookup that produced the link, never the most recent lookup's. A warning about the write (unknown
 markers, or images that could not be stored or were denied) is the `UpdateResult`'s message, which the
 host shows along with the refreshed entries. If that lookup has been evicted in the meantime, the
-warning or a plain "Note added"/"Note updated" message is returned instead. Failures (AnkiDroid
-missing, permission missing, the format's deck or note type deleted, add or update failed, export
-disabled, stale link) are thrown as `DictionaryException`s, which the host shows as an error message.
+warning or a plain "Note added"/"Note updated" message is returned instead. The SDK drops an
+`UpdateResult`'s message for a host older than SDK 0.7.0 (no `PluginHostConfigKeys.HOST_SDK_VERSION`
+at initialization), so for such a host the warning is returned on its own, and the relabeled links
+show the next time a tap refreshes the lookup. Failures (AnkiDroid missing, permission missing, the
+format's deck or note type deleted, add or update failed, export disabled, stale link) are thrown
+as `DictionaryException`s, which the host shows as an error message.
 
 **After a tap.** A link whose tap added a note reads "Added: `<format>`", and one whose tap overwrote
 an existing note reads "Overwritten: `<format>`" (the shape glyph stays). Only the tapped format's link
@@ -213,9 +216,12 @@ to 10,000 UTF-16 code units; older Dokuen versions provide none, so the marker i
 the original's `createFuriganaHtml` (a `<span class="term">` per term, `<ruby>TEXT<rt>READING</rt></ruby>`
 per reading) and `createFuriganaPlain` (` TEXT[READING]` per reading, leading whitespace trimmed),
 unescaped. The readings come from Dokuen (SDK 0.8.0 `CustomActionContext.requestReadings`): on a
-tap, before any field is rendered, the plugin sends the cloze sentence if a current field of the
-format uses either marker, the session language is `ja`, and the sentence is at most
-`CustomActionContext.MAX_READINGS_TEXT_LENGTH` (500) UTF-16 code units. Each word Dokuen returns
+tap, the plugin sends the cloze sentence to Dokuen only if the session language is `ja` and the
+sentence is at most `CustomActionContext.MAX_READINGS_TEXT_LENGTH` (500) UTF-16 code units. If the
+first field (the duplicate key) uses either marker, the readings are requested before any field is
+rendered. Otherwise they are requested after the duplicate decision, and only if a field the write
+keeps uses either marker (`AnkiSentenceFurigana.isNeeded`, which follows the same rules as images).
+A tap that Prevent stops therefore asks for nothing. Each word Dokuen returns
 is a term, and each stretch of text no word covers is one term without a reading
 (`AnkiSentenceFurigana`). As the original's `getReading` does, a segment whose text is a term
 note's own expression shows the note's reading. The answer is kept with the entry's note data, so
@@ -225,7 +231,7 @@ original prints without furigana data, and the next tap asks again. The readings
 before the image and clipboard text requests.
 
 The duplicate check's key is the first field rendered with the sentence furigana (when Dokuen gave
-it) and with the image and clipboard text markers empty.
+it) and with the image and clipboard text markers empty (see "Quirks kept for parity").
 
 The four frequency aggregates (`{frequency-harmonic-rank}`, `{frequency-harmonic-occurrence}`,
 `{frequency-average-rank}`, `{frequency-average-occurrence}`) take the first value of each
@@ -536,10 +542,10 @@ API surface or a deliberate scope boundary:
   image it stored and, when the clipboard still holds the same image, stores it again under the
   same name, so the notes share one file. Through AnkiDroid each add stores a new file (see the
   previous point).
-- **Images are requested only for fields the write keeps.** The original collects the media a
-  card format uses from all of its fields, and on an overwrite still captures and stores the
-  image of a Skip field, or of a "Fill if empty" field that is not empty, before the merge
-  drops it. The plugin does not ask for those (so Dokuen shows no crop UI for them); the
+- **Images and sentence furigana are requested only for fields the write keeps.** The original
+  collects the media a card format uses from all of its fields, and on an overwrite still captures
+  and stores the image of a Skip field, or of a "Fill if empty" field that is not empty, before the
+  merge drops it. The plugin does not ask for those (so Dokuen shows no crop UI for them); the
   resulting note is the same.
 - **The screenshot is the image Dokuen OCR'ed**, not a capture of a browser tab, optionally
   cropped or replaced by a file in Dokuen's crop UI.
@@ -566,6 +572,15 @@ diverging from the original is the goal.
   such as `「A『B』C」` the wrong entry is removed, the stack never empties, and the scan continues
   past the sentence terminators on that side (up to the scan extent or a newline).
   `AnkiSentenceExtractor` does the same, so `{sentence}` and the cloze markers match desktop.
+- **The duplicate check does not find notes whose first field has an image or the clipboard
+  text.** The original searches for duplicates with a note rendered without media
+  (`requirements: []` in `display-anki.js`), so `{screenshot}`, `{clipboard-image}`, and
+  `{clipboard-text}` are empty in the key, while the note it saves has the `<img>` or the text.
+  Anki's checksum keeps media file names and text, so such a note never matches the next key:
+  Prevent and Overwrite do not apply to it, and every tap adds another note even though the link
+  is colored as a duplicate after the write. The plugin renders the key the same way. Sentence
+  furigana, which the original also treats as media, is the one exception, as described under
+  "Differences".
 - **A kanji note made from a headword kanji link splits its cloze at the term, not the kanji.**
   The original's `getCloze` (`anki-note-data-creator.js`) cuts the sentence it carried over at the
   term's offset, with a body as long as the kanji, so for 水入り followed through 入 the body is 水

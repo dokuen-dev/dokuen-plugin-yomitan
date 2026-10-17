@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1]
+
+### Changed
+
+- The host is no longer asked for a sentence's readings when the Anki note will not use them, for
+  example when an existing duplicate prevents the add.
+
+### Fixed
+
+- In the "Installed Dictionaries" list, frequency dictionaries now show the number of frequency
+  entries imported, instead of "0 terms imported".
+- With Dokuen versions older than 1.6.0, the warning after an Anki export (for example, about an
+  unknown marker) is shown again.
+
 ## [1.3.0]
 
 ### Added

@@ -48,6 +48,7 @@ import io.github.dokuendev.dokuenreader.plugin.core.InitResult
 import io.github.dokuendev.dokuenreader.plugin.core.InitResultFactory
 import io.github.dokuendev.dokuenreader.plugin.core.PluginCapabilityKeys
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
+import io.github.dokuendev.dokuenreader.plugin.core.SdkVersion
 import java.util.concurrent.atomic.AtomicLong
 
 // A format created by the tab-strip editor's "+" starts with deckId/modelId 0 (no deck/model
@@ -166,6 +167,14 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     /** The language of the text Dokuen reads (PluginHostConfigKeys.LANGUAGE). */
     @Volatile
     private var sessionLanguage = "ja"
+
+    /**
+     * Whether Dokuen shows an UpdateResult's message. The SDK passes it on only to hosts that
+     * implement SDK 0.7.0 or newer (PluginHostConfigKeys.HOST_SDK_VERSION) and drops it for older
+     * ones.
+     */
+    @Volatile
+    private var hostShowsUpdateMessages = false
     private lateinit var db: AppDatabase
     private lateinit var renderer: YomitanRenderer
     private val deinflector = JapaneseDeinflector()
@@ -324,6 +333,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             isDarkMode = (themeString == "dark")
             // Dokuen may leave the key out for a plugin with a single source language, which is ja.
             sessionLanguage = config?.getString(PluginHostConfigKeys.LANGUAGE) ?: "ja"
+            hostShowsUpdateMessages = SdkVersion.parse(config?.getString(PluginHostConfigKeys.HOST_SDK_VERSION))
+                ?.let { it >= SdkVersion(0, 7, 0) } == true
 
             val cssProcessor = CssProcessor()
             renderer = YomitanRenderer(db, cssProcessor)
@@ -1618,9 +1629,17 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
                 getString(R.string.error_anki_deck_missing, format.name, format.deckName)
             )
         }
-        val noteData = noteDataWithSentenceFurigana(linkContext, format, fieldNames, actionContext)
+        // The first field is the duplicate search's key, so the sentence's furigana is requested
+        // before rendering only when that field uses it; the other fields wait for the duplicate
+        // decision (see below).
+        var noteData = linkContext.noteData()
+        val furiganaRequestedForKey = needsSentenceFurigana(noteData, fieldNames.take(1), format.fields)
+        if (furiganaRequestedForKey) {
+            noteData = requestSentenceFurigana(linkContext, noteData, actionContext)
+        }
+        val keyData = noteData
         val rendered = fieldNames.map { fieldName ->
-            format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, noteData) }
+            format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, keyData) }
         }
         val fieldValues = rendered.map { it?.text ?: "" }
         // Like the original, an unknown marker does not stop the export: it is written into the
@@ -1663,21 +1682,32 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             }
         }
 
+        // Like the images below, the furigana for the other fields is requested only now that it
+        // is known what the write keeps, and at most once per tap.
+        if (!furiganaRequestedForKey && canRequestSentenceFurigana(noteData) &&
+            AnkiSentenceFurigana.isNeeded(fieldNames, format.fields, existing)
+        ) {
+            noteData = requestSentenceFurigana(linkContext, noteData, actionContext)
+        }
+
         // Images are requested only now that it is known what the write keeps, and the fields
         // above (including the duplicate key) were rendered without them. How images are
         // obtained and encoded follows the live settings, not the link's snapshot.
         val media = acquireAnkiMedia(actionContext, liveSettings, format, fieldNames, existing)
             ?: return CustomActionResult.SuccessMessage(getString(R.string.anki_note_not_added))
-        val finalValues = if (media.isEmpty) {
-            fieldValues
-        } else {
-            val withMedia = noteData.copy(
+        if (!media.isEmpty) {
+            noteData = noteData.copy(
                 screenshotFileName = media.screenshotFileName,
                 clipboardImageFileName = media.clipboardImageFileName,
                 clipboardText = media.clipboardText
             )
+        }
+        val finalData = noteData
+        val finalValues = if (finalData === keyData) {
+            fieldValues
+        } else {
             fieldNames.map { fieldName ->
-                format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, withMedia).text } ?: ""
+                format.fields[fieldName]?.let { AnkiTemplateEngine.renderField(it.value, finalData).text } ?: ""
             }
         }
 
@@ -1708,42 +1738,43 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     }
 
     /**
-     * [context]'s note data, with the cloze sentence's furigana requested from Dokuen first when a
-     * current field of [format] uses `{sentence-furigana}` or `{sentence-furigana-plain}` and the
-     * note data has none yet. It is requested before any field is rendered, so the duplicate key
-     * includes it. The answer is kept for later taps of the same entry; a null answer is not, so
-     * the next tap asks again.
+     * Requests the cloze sentence's furigana from Dokuen and returns [data] with it added. Call it
+     * only for a [data] that canRequestSentenceFurigana accepts. The answer is kept in [context]
+     * for later taps of the same entry. When Dokuen gives none, [data] is returned unchanged and
+     * nothing is kept, so the next tap asks again.
      */
-    private suspend fun noteDataWithSentenceFurigana(
+    private suspend fun requestSentenceFurigana(
         context: AnkiLinkContext,
-        format: AnkiCardFormat,
-        fieldNames: List<String>,
+        data: AnkiNoteData,
         actionContext: CustomActionContext
     ): AnkiNoteData {
-        val data = context.noteData()
-        val sentence = data.cloze?.sentence
-        if (sentence == null || !needsSentenceFurigana(data, fieldNames, format.fields)) return data
+        val sentence = data.cloze?.sentence ?: return data
         val words = actionContext.requestReadings(sentence) ?: return data
         return data.copy(sentenceFurigana = AnkiSentenceFurigana.fromReadings(sentence, words))
             .also { context.updateNoteData(it) }
     }
 
     /**
+     * Whether Dokuen can be asked for the cloze sentence's furigana for [data]. That is the case
+     * when [data] has a non-empty sentence but no furigana yet, the session language is `ja`, and
+     * the sentence is at most CustomActionContext.MAX_READINGS_TEXT_LENGTH long.
+     */
+    private fun canRequestSentenceFurigana(data: AnkiNoteData): Boolean {
+        val sentence = data.cloze?.sentence ?: return false
+        return data.sentenceFurigana == null && sessionLanguage == "ja" && sentence.isNotEmpty() &&
+                sentence.length <= CustomActionContext.MAX_READINGS_TEXT_LENGTH
+    }
+
+    /**
      * Whether rendering [fieldNames] of [fields] with [data] would ask Dokuen for the cloze
-     * sentence's furigana first: a field uses either sentence furigana marker, the note data has no
-     * furigana yet, and the sentence can be sent (a `ja` session, at most
-     * CustomActionContext.MAX_READINGS_TEXT_LENGTH long).
+     * sentence's furigana first. That is the case when a field uses `{sentence-furigana}` or
+     * `{sentence-furigana-plain}` and canRequestSentenceFurigana accepts [data].
      */
     private fun needsSentenceFurigana(
         data: AnkiNoteData,
         fieldNames: List<String>,
         fields: Map<String, AnkiField>
-    ): Boolean {
-        val sentence = data.cloze?.sentence ?: return false
-        return data.sentenceFurigana == null && sessionLanguage == "ja" && sentence.isNotEmpty() &&
-                sentence.length <= CustomActionContext.MAX_READINGS_TEXT_LENGTH &&
-                AnkiSentenceFurigana.isUsed(fieldNames, fields)
-    }
+    ): Boolean = canRequestSentenceFurigana(data) && AnkiSentenceFurigana.isUsed(fieldNames, fields)
 
     /**
      * The images a note write got: their AnkiDroid file names, the markers whose image could not
@@ -1856,7 +1887,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * duplicate check (see checkOtherAnkiLinks), and the lookup's entries are returned to show
      * them, along with a warning for unknown markers, images AnkiDroid did not accept, or images
      * the host denied. If the lookup is no longer tracked, the note was still written, so the
-     * warning or a plain confirmation is returned.
+     * warning or a plain confirmation is returned. A host that would drop an UpdateResult's
+     * message (see hostShowsUpdateMessages) gets the warning on its own instead, and the new
+     * labels and colors show the next time a tap refreshes the lookup.
      */
     private suspend fun finishAnkiWrite(
         ref: AnkiLinkRef,
@@ -1919,7 +1952,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             }
         }
         val warning = warnings.takeIf { it.isNotEmpty() }?.joinToString(" ")
-        if (entries != null) return CustomActionResult.UpdateResult(DictionaryResult(entries = entries), warning)
+        if (entries != null && (warning == null || hostShowsUpdateMessages)) {
+            return CustomActionResult.UpdateResult(DictionaryResult(entries = entries), warning)
+        }
         return CustomActionResult.SuccessMessage(
             warning ?: getString(if (added) R.string.anki_note_added else R.string.anki_note_updated)
         )

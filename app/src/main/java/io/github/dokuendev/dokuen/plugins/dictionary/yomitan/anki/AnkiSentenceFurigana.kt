@@ -11,12 +11,24 @@ object AnkiSentenceFurigana {
     const val HTML_MARKER = "sentence-furigana"
     const val PLAIN_MARKER = "sentence-furigana-plain"
 
-    /** Whether a field of the note type's current [fieldNames] uses either marker. */
+    /**
+     * Whether a field of the note type's current [fieldNames] uses `{sentence-furigana}` or
+     * `{sentence-furigana-plain}`.
+     */
     fun isUsed(fieldNames: List<String>, fields: Map<String, AnkiField>): Boolean =
         fieldNames.any { name ->
             val value = fields[name]?.value ?: return@any false
             value.contains("{$HTML_MARKER}") || value.contains("{$PLAIN_MARKER}")
         }
+
+    /**
+     * Whether `{sentence-furigana}` or `{sentence-furigana-plain}` appears in a field that the write
+     * keeps. When adding a note ([existing] null), every field counts. When overwriting [existing],
+     * only a field whose merge keeps the newly rendered value counts (see AnkiMediaNeeds.isNeeded).
+     */
+    fun isNeeded(fieldNames: List<String>, fields: Map<String, AnkiField>, existing: AnkiNoteInfo?): Boolean =
+        AnkiMediaNeeds.isNeeded(HTML_MARKER, fieldNames, fields, existing) ||
+                AnkiMediaNeeds.isNeeded(PLAIN_MARKER, fieldNames, fields, existing)
 
     /**
      * The terms of [sentence] from Dokuen's [words] of it. Each word is a term, and each stretch of

@@ -165,7 +165,8 @@ class AnkiExecutionTest {
     private suspend fun newService(
         settings: AnkiSettings,
         client: AnkiDroidClient,
-        language: String? = null
+        language: String? = null,
+        hostSdkVersion: String? = "0.8.0"
     ): YomitanDictionaryPluginService {
         AnkiSettingsStore.save(app, settings)
         val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
@@ -173,6 +174,7 @@ class AnkiExecutionTest {
         service.onInitialize(Bundle().apply {
             putString(PluginHostConfigKeys.UI_THEME, "light")
             language?.let { putString(PluginHostConfigKeys.LANGUAGE, it) }
+            hostSdkVersion?.let { putString(PluginHostConfigKeys.HOST_SDK_VERSION, it) }
         })
         return service
     }
@@ -266,6 +268,30 @@ class AnkiExecutionTest {
         val message = warning(result)
         assertTrue(message, message.contains("{expresion}"))
         assertTrue(message, message.contains("Vocab"))
+        assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(result)))
+    }
+
+    @Test
+    fun aHostThatDropsUpdateMessagesGetsTheWarningOnItsOwn() = runBlocking {
+        val badFormat =
+            format(fields = mapOf("Front" to AnkiField(value = "{expression}"), "Back" to AnkiField("{expresion}")))
+        // A host older than SDK 0.7.0 sends no version, and the SDK drops an UpdateResult's message for it.
+        val service = newService(settings(badFormat), mockClient(), hostSdkVersion = null)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(payload)
+
+        val message = (result as CustomActionResult.SuccessMessage).message
+        assertTrue(message, message.contains("{expresion}"))
+    }
+
+    @Test
+    fun aHostThatDropsUpdateMessagesStillGetsTheRefreshWithoutAWarning() = runBlocking {
+        val service = newService(settings(), mockClient(), hostSdkVersion = null)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(payload)
+
         assertEquals(listOf("● Added: Vocab"), linkLabels(updatedEntry(result)))
     }
 
@@ -1036,6 +1062,63 @@ class AnkiExecutionTest {
             ),
             fieldsCaptor.firstValue
         )
+    }
+
+    /** A format keyed on the expression, with the sentence furigana in its other field. */
+    private fun furiganaBackFormat(mode: AnkiFieldOverwriteMode = AnkiFieldOverwriteMode.COALESCE) = format(
+        fields = mapOf(
+            "Front" to AnkiField(value = "{expression}"),
+            "Back" to AnkiField(value = "{sentence-furigana-plain}", overwriteMode = mode)
+        )
+    )
+
+    @Test
+    fun readingsForAFieldOtherThanTheKeyAreRequestedAfterTheDuplicateSearch() = runBlocking {
+        val client = mockClient()
+        val service = newService(settings(furiganaBackFormat()), client)
+        val context = FakeActionContext(readings = { sentenceReadings() })
+        var requestsBeforeSearch = -1
+        whenever(client.findDuplicateNotes(any(), any(), any(), any<AnkiDuplicateScope>(), any())).thenAnswer {
+            requestsBeforeSearch = context.readingsRequests.size
+            emptyList<AnkiNoteInfo>()
+        }
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertEquals(0, requestsBeforeSearch)
+        assertEquals(1, context.readingsRequests.size)
+        verify(client).findDuplicateNotes(any(), any(), eq("水入り"), any<AnkiDuplicateScope>(), any())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals(listOf("水入り", "冷[つめ]たい 水[みず] 入[い]りの 瓶[びん]。"), fieldsCaptor.firstValue)
+    }
+
+    @Test
+    fun noReadingsRequestWhenTheDuplicateIsPrevented() = runBlocking {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "水入り", "")))
+        val service = newService(settings(furiganaBackFormat()), client)
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+    }
+
+    @Test
+    fun noReadingsRequestForAFieldTheOverwriteSkips() = runBlocking<Unit> {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "水入り", "old")))
+        val service = newService(
+            settings(furiganaBackFormat(AnkiFieldOverwriteMode.SKIP), behavior = AnkiDuplicateBehavior.OVERWRITE),
+            client
+        )
+        val context = FakeActionContext(readings = { sentenceReadings() })
+
+        service.executeAction(scannedPayload(service), context)
+
+        assertTrue(context.readingsRequests.isEmpty())
+        verify(client).updateNoteFields(eq(55L), eq(listOf("水入り", "old")))
     }
 
     @Test
