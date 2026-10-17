@@ -456,9 +456,9 @@ internal object AnkiJapanese {
         while (i < text.length) {
             val codePoint = text.codePointAt(i)
             i += Character.charCount(codePoint)
-            when {
-                codePoint == KATAKANA_SMALL_KA || codePoint == KATAKANA_SMALL_KE -> result.appendCodePoint(codePoint)
-                codePoint == PROLONGED_SOUND_MARK -> {
+            when (codePoint) {
+                KATAKANA_SMALL_KA, KATAKANA_SMALL_KE -> result.appendCodePoint(codePoint)
+                PROLONGED_SOUND_MARK -> {
                     val replacement = if (!keepProlongedSoundMarks && result.isNotEmpty()) {
                         prolongedHiragana(result[result.length - 1])
                     } else {
@@ -467,7 +467,7 @@ internal object AnkiJapanese {
                     if (replacement != null) result.append(replacement) else result.appendCodePoint(codePoint)
                 }
 
-                codePoint in KATAKANA_CONVERSION_START..KATAKANA_CONVERSION_END ->
+                in KATAKANA_CONVERSION_START..KATAKANA_CONVERSION_END ->
                     result.appendCodePoint(codePoint + (HIRAGANA_CONVERSION_START - KATAKANA_CONVERSION_START))
 
                 else -> result.appendCodePoint(codePoint)

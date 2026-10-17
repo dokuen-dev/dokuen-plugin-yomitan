@@ -66,10 +66,10 @@ class AnkiExecutionTest {
 
     private companion object {
         // The link colors of the duplicate states, as the original's icons render them.
-        val GREEN = 0xFF6FB558.toInt()
-        val PURPLE = 0xFFD08AE7.toInt()
-        val ORANGE = 0xFFFF8727.toInt()
-        val GRAY = 0xFF9F9F9F.toInt()
+        const val GREEN = 0xFF6FB558.toInt()
+        const val PURPLE = 0xFFD08AE7.toInt()
+        const val ORANGE = 0xFFFF8727.toInt()
+        const val GRAY = 0xFF9F9F9F.toInt()
     }
 
     private lateinit var app: Application
@@ -235,7 +235,7 @@ class AnkiExecutionTest {
         AnkiNoteInfo(id = id, modelId = modelId, fields = fields.toList(), tags = emptySet())
 
     @Test
-    fun tapAddsNoteWithRenderedFieldsAndConfiguredTags() = runBlocking<Unit> {
+    fun tapAddsNoteWithRenderedFieldsAndConfiguredTags() = runBlocking {
         val client = mockClient()
         val service = newService(settings(tags = listOf("dokuen", "mined")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -251,7 +251,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun unknownMarkerIsWrittenAsRenderErrorAndReported() = runBlocking<Unit> {
+    fun unknownMarkerIsWrittenAsRenderErrorAndReported() = runBlocking {
         val client = mockClient()
         val badFormat =
             format(fields = mapOf("Front" to AnkiField(value = "{expression}"), "Back" to AnkiField("{expresion}")))
@@ -270,7 +270,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun fieldsTheNoteTypeNoLongerHasAreNeitherSentNorReported() = runBlocking<Unit> {
+    fun fieldsTheNoteTypeNoLongerHasAreNeitherSentNorReported() = runBlocking {
         val client = mockClient()
         val fmt = format(
             fields = mapOf(
@@ -291,7 +291,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun recognizedButUnimplementedMarkersAreNotErrors() = runBlocking<Unit> {
+    fun recognizedButUnimplementedMarkersAreNotErrors() = runBlocking {
         val client = mockClient()
         val fmt = format(
             fields = mapOf(
@@ -345,7 +345,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun overwriteBehaviorMergesPerFieldModeAndMarksTheLinkOverwritten() = runBlocking<Unit> {
+    fun overwriteBehaviorMergesPerFieldModeAndMarksTheLinkOverwritten() = runBlocking {
         val client = mockClient()
         stubDuplicates(client, listOf(duplicate(55L, "旧", "old")))
         val fmt = format(
@@ -406,7 +406,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun addFailureIsReported() = runBlocking<Unit> {
+    fun addFailureIsReported() = runBlocking {
         val client = mockClient()
         whenever(client.addNote(any(), any(), any(), any())).thenReturn(null)
         val service = newService(settings(), client)
@@ -446,7 +446,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun ankiDroidExceptionIsReportedAsDictionaryException() = runBlocking<Unit> {
+    fun ankiDroidExceptionIsReportedAsDictionaryException() = runBlocking {
         val client = mockClient()
         whenever(client.addNote(any(), any(), any(), any())).thenThrow(SecurityException("permission revoked"))
         val service = newService(settings(), client)
@@ -458,7 +458,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun updateFailureIsReported() = runBlocking<Unit> {
+    fun updateFailureIsReported() = runBlocking {
         val client = mockClient()
         stubDuplicates(client, listOf(duplicate(55L, "食べる (たべる)", "x")))
         whenever(client.updateNoteFields(any(), any())).thenReturn(false)
@@ -471,7 +471,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun linkFromAnEarlierLookupStillWorksAndUpdatesThatLookupsEntries() = runBlocking<Unit> {
+    fun linkFromAnEarlierLookupStillWorksAndUpdatesThatLookupsEntries() = runBlocking {
         val client = mockClient()
         val service = newService(settings(), client)
         val first = lookup(service, "食べる")
@@ -490,7 +490,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun formatIndexResolvesAgainstTheFormatsSeenWhenTheLinkWasRendered() = runBlocking<Unit> {
+    fun formatIndexResolvesAgainstTheFormatsSeenWhenTheLinkWasRendered() = runBlocking {
         val client = mockClient()
         val service = newService(settings(format(name = "Vocab", modelId = 2L), tags = listOf("old-tag")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -512,7 +512,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun disabledSettingsRenderNoLinks() = runBlocking<Unit> {
+    fun disabledSettingsRenderNoLinks() = runBlocking {
         val service = newService(settings(enabled = false), mockClient())
 
         val entry = lookup(service, "食べる").entries[0]
@@ -522,7 +522,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun turningExportOffAfterRenderingRefusesTheTap() = runBlocking<Unit> {
+    fun turningExportOffAfterRenderingRefusesTheTap() = runBlocking {
         val client = mockClient()
         val service = newService(settings(), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -535,7 +535,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun settingsEditedMidSessionApplyToTheNextLookup() = runBlocking<Unit> {
+    fun settingsEditedMidSessionApplyToTheNextLookup() = runBlocking {
         val service = newService(settings(enabled = false), mockClient())
         assertTrue(addPayloads(lookup(service, "食べる").entries[0]).isEmpty())
 
@@ -545,7 +545,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun evictedTokenYieldsExpiredLinkErrorInsteadOfCrashing() = runBlocking<Unit> {
+    fun evictedTokenYieldsExpiredLinkErrorInsteadOfCrashing() = runBlocking {
         val client = mockClient()
         val service = newService(settings(), client)
         service.ankiCacheCapacity = 2
@@ -580,7 +580,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun everyEntryOfALargeLookupStaysTappable() = runBlocking<Unit> {
+    fun everyEntryOfALargeLookupStaysTappable() = runBlocking {
         // More entries than the cache holds lookups, so a per-entry cache would evict the top
         // entries' links before they were ever shown.
         withContext(Dispatchers.IO) {
@@ -607,7 +607,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun shutdownClearsTheTokenCache() = runBlocking<Unit> {
+    fun shutdownClearsTheTokenCache() = runBlocking {
         val service = newService(settings(), mockClient())
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
@@ -647,7 +647,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun overwriteWithOnlyOtherNoteTypeDuplicatesAddsNewNoteWithoutUpdating() = runBlocking<Unit> {
+    fun overwriteWithOnlyOtherNoteTypeDuplicatesAddsNewNoteWithoutUpdating() = runBlocking {
         val client = mockClient()
         stubDuplicates(client, listOf(duplicate(70L, "他", "other", modelId = 9L)))
         val service = newService(
@@ -677,7 +677,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noteDataIsBuiltAtTapTimeNotAtLookupTime() = runBlocking<Unit> {
+    fun noteDataIsBuiltAtTapTimeNotAtLookupTime() = runBlocking {
         val client = mockClient()
         val fmt = format(
             fields = mapOf("Front" to AnkiField(value = "{expression}"), "Back" to AnkiField(value = "{frequencies}"))
@@ -702,7 +702,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noteDataIsBuiltOnceAndReusedAcrossTaps() = runBlocking<Unit> {
+    fun noteDataIsBuiltOnceAndReusedAcrossTaps() = runBlocking {
         val client = mockClient()
         val fmt = format(
             fields = mapOf("Front" to AnkiField(value = "{expression}"), "Back" to AnkiField(value = "{frequencies}"))
@@ -722,7 +722,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun onlyTheTappedLinkIsMarkedAddedAndTheOthersStayInPlace() = runBlocking<Unit> {
+    fun onlyTheTappedLinkIsMarkedAddedAndTheOthersStayInPlace() = runBlocking {
         val client = mockClient()
         val service = newService(
             settings(format(name = "Vocab"), format(name = "Sentences"), format(name = "Cloze")),
@@ -759,7 +759,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun secondTapOnAnAddedLinkOverwritesTheNoteWhenOverwritingIsAllowed() = runBlocking<Unit> {
+    fun secondTapOnAnAddedLinkOverwritesTheNoteWhenOverwritingIsAllowed() = runBlocking {
         val client = mockClient()
         val service = newService(settings(behavior = AnkiDuplicateBehavior.OVERWRITE), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -774,7 +774,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun secondTapOnAnAddedLinkAddsAnotherNoteWhenAddingIsAllowed() = runBlocking<Unit> {
+    fun secondTapOnAnAddedLinkAddsAnotherNoteWhenAddingIsAllowed() = runBlocking {
         val client = mockClient()
         val service = newService(settings(behavior = AnkiDuplicateBehavior.ALWAYS_ADD), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -788,7 +788,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun addWithUnknownMarkersIsReportedAndRelabelsItsLinkAtOnce() = runBlocking<Unit> {
+    fun addWithUnknownMarkersIsReportedAndRelabelsItsLinkAtOnce() = runBlocking {
         val client = mockClient()
         val badFormat = format(
             name = "Bad",
@@ -841,7 +841,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun addedLinkColorFollowsTheDuplicateBehavior() = runBlocking<Unit> {
+    fun addedLinkColorFollowsTheDuplicateBehavior() = runBlocking {
         val expected = mapOf(
             AnkiDuplicateBehavior.PREVENT to GRAY,
             AnkiDuplicateBehavior.OVERWRITE to ORANGE,
@@ -867,7 +867,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun onlyTheTappedEntryIsChecked() = runBlocking<Unit> {
+    fun onlyTheTappedEntryIsChecked() = runBlocking {
         withContext(Dispatchers.IO) {
             db.termDao().bulkAdd(
                 (0 until 2).map { i ->
@@ -897,7 +897,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun withoutDuplicateCheckingNothingIsQueriedAndTheAddedLinkWouldAddAgain() = runBlocking<Unit> {
+    fun withoutDuplicateCheckingNothingIsQueriedAndTheAddedLinkWouldAddAgain() = runBlocking {
         val client = mockClient()
         val service = newService(
             settings(format(name = "Vocab"), format(name = "Other"), checkForDuplicates = false),
@@ -911,7 +911,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun preventedTapGraysItsLinkOnTheNextRefresh() = runBlocking<Unit> {
+    fun preventedTapGraysItsLinkOnTheNextRefresh() = runBlocking {
         val client = mockClient()
         stubDuplicatesFor(client, 2L, listOf(duplicate(20L, "食べる (たべる)", "x", modelId = 2L)))
         val service = newService(
@@ -929,7 +929,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun aFailedCheckOfAnotherLinkLeavesItsColorAndStillRefreshes() = runBlocking<Unit> {
+    fun aFailedCheckOfAnotherLinkLeavesItsColorAndStillRefreshes() = runBlocking {
         val client = mockClient()
         whenever(
             client.findDuplicateNotes(eq(5L), any(), any(), any<AnkiDuplicateScope>(), any())
@@ -1014,7 +1014,7 @@ class AnkiExecutionTest {
         addPayloads(scan(service, contextText, "水入り").entries.single { it.headword == "水入り" }).single()
 
     @Test
-    fun sentenceFuriganaIsRequestedBeforeTheDuplicateSearchAndRendered() = runBlocking<Unit> {
+    fun sentenceFuriganaIsRequestedBeforeTheDuplicateSearchAndRendered() = runBlocking {
         val client = mockClient()
         val service = newService(settings(furiganaFormat), client)
         val context = FakeActionContext(readings = { sentenceReadings() })
@@ -1039,7 +1039,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noReadingsFallBackToThePlainSentence() = runBlocking<Unit> {
+    fun noReadingsFallBackToThePlainSentence() = runBlocking {
         val client = mockClient()
         val service = newService(settings(furiganaFormat), client)
         val context = FakeActionContext()
@@ -1053,7 +1053,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noReadingsRequestWithoutTheMarkersInTheNoteTypesFields() = runBlocking<Unit> {
+    fun noReadingsRequestWithoutTheMarkersInTheNoteTypesFields() = runBlocking {
         val withOldField = format(
             fields = mapOf(
                 "Front" to AnkiField(value = "{expression}"),
@@ -1070,7 +1070,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noReadingsRequestWithoutASentence() = runBlocking<Unit> {
+    fun noReadingsRequestWithoutASentence() = runBlocking {
         val service = newService(settings(furiganaFormat), mockClient())
         val context = FakeActionContext(readings = { sentenceReadings() })
 
@@ -1081,7 +1081,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noReadingsRequestOutsideJapaneseSessions() = runBlocking<Unit> {
+    fun noReadingsRequestOutsideJapaneseSessions() = runBlocking {
         val client = mockClient()
         val service = newService(settings(furiganaFormat), client, language = "zh")
         val context = FakeActionContext(readings = { sentenceReadings() })
@@ -1095,7 +1095,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noReadingsRequestForASentenceOverTheLimit() = runBlocking<Unit> {
+    fun noReadingsRequestForASentenceOverTheLimit() = runBlocking {
         // 𠀋 is two UTF-16 code units, so the sentence the scan extent allows exceeds 500 of them.
         val longContext = "𠀋".repeat(300) + "水入り" + "𠀋".repeat(300) + "。"
         val service = newService(settings(furiganaFormat), mockClient())
@@ -1107,7 +1107,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun readingsAreAskedForOnceAndReusedByLaterTaps() = runBlocking<Unit> {
+    fun readingsAreAskedForOnceAndReusedByLaterTaps() = runBlocking {
         val service = newService(settings(furiganaFormat, behavior = AnkiDuplicateBehavior.ALWAYS_ADD), mockClient())
         val context = FakeActionContext(readings = { sentenceReadings() })
         val payload = scannedPayload(service)
@@ -1119,7 +1119,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noReadingsAreAskedForAgainOnTheNextTap() = runBlocking<Unit> {
+    fun noReadingsAreAskedForAgainOnTheNextTap() = runBlocking {
         val service = newService(settings(furiganaFormat, behavior = AnkiDuplicateBehavior.ALWAYS_ADD), mockClient())
         val context = FakeActionContext()
         val payload = scannedPayload(service)
@@ -1180,7 +1180,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun readingsAreRequestedBeforeImagesAndClipboardText() = runBlocking<Unit> {
+    fun readingsAreRequestedBeforeImagesAndClipboardText() = runBlocking {
         val client = mockClient().also { stubAddImage(it) }
         val format = imageFormat(picture = "{screenshot}{clipboard-text}{sentence-furigana}")
         val service = newService(settings(format), client)
@@ -1192,7 +1192,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun scannedTermNoteUsesTheSentenceAroundTheMatch() = runBlocking<Unit> {
+    fun scannedTermNoteUsesTheSentenceAroundTheMatch() = runBlocking {
         val service = newService(settings(format()), mockClient())
         val entry = scan(service, "冷たい水入りの瓶。次の文。", "水入り").entries.single { it.headword == "水入り" }
 
@@ -1205,7 +1205,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun tappedKanjiNoteUsesTheSentenceAroundTheKanji() = runBlocking<Unit> {
+    fun tappedKanjiNoteUsesTheSentenceAroundTheKanji() = runBlocking {
         addKanji("瓶")
         val service = newService(settings(kanjiFormat()), mockClient())
         val entry = scan(service, "冷たい水入りの瓶。次の文。", "瓶").entries.single()
@@ -1219,7 +1219,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun kanjiNoteFromAHeadwordLinkUsesTheTermsSentence() = runBlocking<Unit> {
+    fun kanjiNoteFromAHeadwordLinkUsesTheTermsSentence() = runBlocking {
         addKanji("入")
         val service = newService(settings(format(), kanjiFormat()), mockClient())
         val termEntry = scan(service, "冷たい水入りの瓶。次の文。", "水入り").entries.single { it.headword == "水入り" }
@@ -1238,7 +1238,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun kanjiHeadwordLinksAreUnchangedWithoutAKanjiFormat() = runBlocking<Unit> {
+    fun kanjiHeadwordLinksAreUnchangedWithoutAKanjiFormat() = runBlocking {
         val service = newService(settings(format()), mockClient())
         val termEntry = scan(service, "冷たい水入りの瓶。", "水入り").entries.single { it.headword == "水入り" }
 
@@ -1246,7 +1246,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun kanjiNoteHasNoSentenceWhenTheLinkedLookupIsGoneOrTheRefIsMalformed() = runBlocking<Unit> {
+    fun kanjiNoteHasNoSentenceWhenTheLinkedLookupIsGoneOrTheRefIsMalformed() = runBlocking {
         addKanji("入")
         val service = newService(settings(format(), kanjiFormat()), mockClient())
         service.ankiCacheCapacity = 1
@@ -1270,7 +1270,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun eachKanjiEntryExportsItsOwnDictionary() = runBlocking<Unit> {
+    fun eachKanjiEntryExportsItsOwnDictionary() = runBlocking {
         val second = "Kanji Two"
         withContext(Dispatchers.IO) {
             db.dictionaryDao().insertDictionary(
@@ -1308,7 +1308,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun searchQueryIsTheLongestScannedMatch() = runBlocking<Unit> {
+    fun searchQueryIsTheLongestScannedMatch() = runBlocking {
         withContext(Dispatchers.IO) {
             db.termDao().bulkAdd(
                 listOf(
@@ -1331,7 +1331,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun searchQueryOfAnInternalLinkIsItsQuery() = runBlocking<Unit> {
+    fun searchQueryOfAnInternalLinkIsItsQuery() = runBlocking {
         val service = newService(settings(format()), mockClient())
         val entry = lookup(service, "食べる").entries[0]
 
@@ -1339,7 +1339,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun searchQueryOfAScannedKanjiIsTheCharacter() = runBlocking<Unit> {
+    fun searchQueryOfAScannedKanjiIsTheCharacter() = runBlocking {
         addKanji("瓶")
         val service = newService(settings(format(), kanjiFormat()), mockClient())
         val tapped = scan(service, "冷たい水入りの瓶。", "瓶").entries.single()
@@ -1348,7 +1348,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun kanjiFromAHeadwordLinkKeepsTheTermLookupsQuery() = runBlocking<Unit> {
+    fun kanjiFromAHeadwordLinkKeepsTheTermLookupsQuery() = runBlocking {
         // As the original's kanji links carry the popup's full query into the kanji lookup.
         addKanji("入", "食")
         val service = newService(settings(format(), kanjiFormat()), mockClient())
@@ -1365,7 +1365,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun kanjiFromAnExpiredHeadwordLinkUsesTheCharacter() = runBlocking<Unit> {
+    fun kanjiFromAnExpiredHeadwordLinkUsesTheCharacter() = runBlocking {
         addKanji("入")
         val service = newService(settings(format(), kanjiFormat()), mockClient())
         val linked = followLink(service, "lookup:?kanji=入&origin_ref=nonsense").entries.single()
@@ -1374,7 +1374,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun glossaryIncludesTheDictionaryStyles() = runBlocking<Unit> {
+    fun glossaryIncludesTheDictionaryStyles() = runBlocking {
         withContext(Dispatchers.IO) {
             val dao = db.dictionaryDao()
             dao.updateDictionary(dao.getDictionaryByTitle(dictTitle)!!.copy(styles = "a { color: red; }"))
@@ -1424,7 +1424,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun screenshotIsRequestedAndWrittenIntoTheNote() = runBlocking<Unit> {
+    fun screenshotIsRequestedAndWrittenIntoTheNote() = runBlocking {
         val client = mockClient().also { stubAddImage(it) }
         val service = newService(settings(imageFormat()), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1442,7 +1442,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun cropSettingMakesTheRequestInteractiveAndJpegIsUsed() = runBlocking<Unit> {
+    fun cropSettingMakesTheRequestInteractiveAndJpegIsUsed() = runBlocking {
         val client = mockClient().also { stubAddImage(it) }
         val service = newService(
             settings(imageFormat()).copy(
@@ -1463,7 +1463,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun clipboardImageIsPngWhateverTheScreenshotFormat() = runBlocking<Unit> {
+    fun clipboardImageIsPngWhateverTheScreenshotFormat() = runBlocking {
         val client = mockClient()
         val written = stubAddImage(client)
         val service = newService(
@@ -1487,7 +1487,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun outOfRangeJpegQualityStillStoresTheImage() = runBlocking<Unit> {
+    fun outOfRangeJpegQualityStillStoresTheImage() = runBlocking {
         val client = mockClient()
         val written = stubAddImage(client)
         val service = newService(
@@ -1505,7 +1505,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun anImageThatCannotBeStoredStillWritesTheNoteAndSaysSo() = runBlocking<Unit> {
+    fun anImageThatCannotBeStoredStillWritesTheNoteAndSaysSo() = runBlocking {
         val client = mockClient()
         whenever(client.addImage(any(), any())).thenThrow(IllegalStateException("cannot store"))
         val service = newService(settings(imageFormat()), client)
@@ -1532,7 +1532,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun screenshotThenClipboardAreBothRequested() = runBlocking<Unit> {
+    fun screenshotThenClipboardAreBothRequested() = runBlocking {
         val client = mockClient().also { stubAddImage(it) }
         val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1580,7 +1580,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun preventedDuplicateRequestsNothing() = runBlocking<Unit> {
+    fun preventedDuplicateRequestsNothing() = runBlocking {
         val client = mockClient()
         stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
         val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.PREVENT), client)
@@ -1610,7 +1610,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun overwriteMergesTheImageIntoTheExistingNote() = runBlocking<Unit> {
+    fun overwriteMergesTheImageIntoTheExistingNote() = runBlocking {
         val client = mockClient().also { stubAddImage(it) { "stored.png" } }
         stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
         val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE), client)
@@ -1624,7 +1624,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun screenshotInTheFirstFieldDoesNotChangeTheDuplicateKey() = runBlocking<Unit> {
+    fun screenshotInTheFirstFieldDoesNotChangeTheDuplicateKey() = runBlocking {
         val client = mockClient().also { stubAddImage(it) }
         val firstFieldImage = format(
             fields = mapOf("Front" to AnkiField("{expression}{screenshot}"), "Back" to AnkiField("{reading}"))
@@ -1641,7 +1641,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun failedMediaInsertStillWritesTheNoteAndSaysSo() = runBlocking<Unit> {
+    fun failedMediaInsertStillWritesTheNoteAndSaysSo() = runBlocking {
         val client = mockClient().also { stubAddImage(it) { null } }
         val service = newService(settings(imageFormat()), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1656,7 +1656,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun deniedWritesTheNoteWithoutImagesAndSaysWhy() = runBlocking<Unit> {
+    fun deniedWritesTheNoteWithoutImagesAndSaysWhy() = runBlocking {
         val client = mockClient().also { stubAddImage(it) }
         val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1680,7 +1680,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun deniedOnOverwriteSaysTheNoteWasUpdated() = runBlocking<Unit> {
+    fun deniedOnOverwriteSaysTheNoteWasUpdated() = runBlocking {
         val client = mockClient()
         stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
         val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE), client)
@@ -1699,7 +1699,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun clipboardTextIsRequestedAndRendered() = runBlocking<Unit> {
+    fun clipboardTextIsRequestedAndRendered() = runBlocking {
         val client = mockClient()
         val service = newService(settings(imageFormat(picture = "{clipboard-text}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1715,7 +1715,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun clipboardTextLineBreaksAreNormalizedAsTheOriginalsPasteTargetDoes() = runBlocking<Unit> {
+    fun clipboardTextLineBreaksAreNormalizedAsTheOriginalsPasteTargetDoes() = runBlocking {
         val client = mockClient()
         val service = newService(settings(imageFormat(picture = "{clipboard-text}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1728,7 +1728,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun clipboardTextIsRequestedAfterImagesEvenWhenTheyAreDenied() = runBlocking<Unit> {
+    fun clipboardTextIsRequestedAfterImagesEvenWhenTheyAreDenied() = runBlocking {
         val client = mockClient()
         val service = newService(settings(imageFormat(picture = "{screenshot}|{clipboard-text}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1767,7 +1767,7 @@ class AnkiExecutionTest {
     }
 
     @Test
-    fun noClipboardTextWithoutTheMarker() = runBlocking<Unit> {
+    fun noClipboardTextWithoutTheMarker() = runBlocking {
         val client = mockClient()
         val service = newService(settings(imageFormat()), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()

@@ -540,7 +540,7 @@ class MainViewModelTest {
         viewModel.setAnkiEnabled(true)
 
         assertEquals(true, viewModel.uiState.value.ankiSettings.enabled)
-        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        val reloaded = AnkiSettingsStore.load(app)
         assertEquals(true, reloaded.enabled)
     }
 
@@ -549,7 +549,7 @@ class MainViewModelTest {
      * list itself (a fresh install starts with the original's three default formats).
      */
     private fun viewModelWithNoCardFormats(): MainViewModel {
-        io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.save(
+        AnkiSettingsStore.save(
             app,
             io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings()
         )
@@ -611,7 +611,7 @@ class MainViewModelTest {
         viewModel.setAnkiDuplicateScopeCheckAllModels(true)
 
         assertEquals(true, viewModel.uiState.value.ankiSettings.duplicateScopeCheckAllModels)
-        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        val reloaded = AnkiSettingsStore.load(app)
         assertEquals(true, reloaded.duplicateScopeCheckAllModels)
     }
 
@@ -655,7 +655,7 @@ class MainViewModelTest {
 
         viewModel.updateAnkiCardFormat(0) { it.copy(name = "Vocab (renamed)") }
         assertEquals(listOf("Vocab (renamed)"), viewModel.uiState.value.ankiSettings.cardFormats.map { it.name })
-        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        val reloaded = AnkiSettingsStore.load(app)
         assertEquals(listOf("Vocab (renamed)"), reloaded.cardFormats.map { it.name })
 
         // Out-of-bounds index must be a no-op, not a crash or a silent list-growing append.
@@ -734,7 +734,7 @@ class MainViewModelTest {
         val fields = viewModel.uiState.value.ankiSettings.cardFormats[0].fields
         assertEquals(listOf("Front", "Reading"), fields.keys.toList())
         assertEquals(existing, fields["Reading"])
-        val reloaded = io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore.load(app)
+        val reloaded = AnkiSettingsStore.load(app)
         assertEquals(fields, reloaded.cardFormats[0].fields)
     }
 

@@ -158,7 +158,7 @@ interface TermDao {
     /**
      * Find terms by exact expression, restricted to the given dictionary set.
      *
-     * Maps to the `expression` index walk in findTermsBulk(…,'exact').
+     * Maps to the `expression` index walk in findTermsBulk(...,'exact').
      */
     @Query(
         """
@@ -172,7 +172,7 @@ interface TermDao {
     /**
      * Find terms by exact reading, restricted to the given dictionary set.
      *
-     * Maps to the `reading` index walk in findTermsBulk(…,'exact').
+     * Maps to the `reading` index walk in findTermsBulk(...,'exact').
      */
     @Query(
         """
@@ -575,7 +575,7 @@ interface DictionaryDeletionDao {
     /**
      * Atomically delete a dictionary and all of its associated data.
      *
-     * JS: deleteDictionary(dictionaryName, …)
+     * JS: deleteDictionary(dictionaryName, ...)
      *   Wave 1: kanji, kanjiMeta, terms, termMeta, tagMeta, media  (by 'dictionary' index)
      *   Wave 2: dictionaries  (by 'title' index)
      */

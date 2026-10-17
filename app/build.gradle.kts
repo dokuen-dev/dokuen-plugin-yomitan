@@ -49,6 +49,17 @@ android {
             excludes += "META-INF/buildinfo.xml"
         }
     }
+
+    lint {
+        disable.addAll(
+            listOf(
+                // From com.ichi2.anki.lint, which is imported into this project automatically,
+                // but are meant for AnkiDroid's own code and shouldn't apply here
+                "DirectCalendarInstanceUsage",
+                "DirectSystemCurrentTimeMillisUsage"
+            )
+        )
+    }
 }
 
 dependencies {

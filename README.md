@@ -1,6 +1,6 @@
 # Yomitan plugin for Dokuen Japanese Reader
 
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.24-blue.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-blue.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-Compile_SDK_37-green.svg?style=flat&logo=android)](https://developer.android.com)
 [![Compose](https://img.shields.io/badge/Compose-Jetpack-purple.svg?style=flat&logo=jetpackcompose)](https://developer.android.com)
 [![SQLite Room](https://img.shields.io/badge/SQLite-Room_Database-blue?style=flat&logo=sqlite)](https://developer.android.com/training/data-storage/room)

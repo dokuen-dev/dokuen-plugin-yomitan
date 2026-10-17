@@ -312,20 +312,19 @@ object AnkiDictionaryStyles {
         val sb = StringBuilder(css.length)
         var i = 0
         while (i < css.length) {
-            val c = css[i]
-            when {
-                c == '\\' -> {
+            when (val c = css[i]) {
+                '\\' -> {
                     sb.append(css, i, minOf(i + 2, css.length))
                     i += 2
                 }
 
-                c == '"' || c == '\'' -> {
+                '"', '\'' -> {
                     val end = skipString(css, i)
                     sb.append(css, i, end)
                     i = end
                 }
 
-                c == '/' && i + 1 < css.length && css[i + 1] == '*' -> {
+                '/' if i + 1 < css.length && css[i + 1] == '*' -> {
                     val end = css.indexOf("*/", i + 2)
                     i = if (end < 0) css.length else end + 2
                     sb.append(' ')

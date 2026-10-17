@@ -185,7 +185,7 @@ object AnkiNoteDataBuilder {
         fun slice(from: Int, to: Int) = String(chars, from, maxOf(to - from, 0))
         val body = slice(offset, bodyEnd)
         val bodyKana = AnkiJapanese.distributeFuriganaInflected(term, reading, body)
-            .joinToString("") { if (it.reading.isNotEmpty()) it.reading else it.text }
+            .joinToString("") { it.reading.ifEmpty { it.text } }
         return AnkiClozeData(
             sentence = sentence.text,
             prefix = slice(0, offset),

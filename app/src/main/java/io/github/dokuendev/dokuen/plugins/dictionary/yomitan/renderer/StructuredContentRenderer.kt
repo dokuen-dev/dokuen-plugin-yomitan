@@ -1146,12 +1146,12 @@ class StructuredContentRenderer(
         // onLookup receives everything after the "lookup:" prefix verbatim as contextText,
         // and lookupInternalLink() then parses the full query string.
         // We must therefore preserve the entire "?..." string so that all parameters
-        // (query, primary_reading, wildcards, kanji, …) reach lookupInternalLink intact.
+        // (query, primary_reading, wildcards, kanji, ...) reach lookupInternalLink intact.
         //
         // Conversion rules:
-        //   "?..."         → "lookup:?..."     (all internal links, all params preserved)
-        //   "http(s)://…"  → unchanged         (external links)
-        //   anything else  → unchanged         (fallback)
+        //   "?..."           -> "lookup:?..."  (all internal links, all params preserved)
+        //   "http(s)://..."  -> unchanged      (external links)
+        //   anything else    -> unchanged      (fallback)
         if (href.startsWith("?")) {
             return "lookup:$href"
         }
