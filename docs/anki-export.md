@@ -732,13 +732,13 @@ It writes to the device's AnkiDroid collection: it creates the decks `DokuenPlug
 `DokuenPluginTest::Sub` and keeps them (AnkiDroid's API cannot delete decks), and adds notes
 tagged `dokuen-plugin-test`, which it deletes afterwards (it fails if any are left). Don't run it
 with `connectedAndroidTest`, which uninstalls the app when it finishes and so deletes its installed
-dictionaries and settings. Install both APKs and run it with `am instrument` instead:
+dictionaries and settings. The build makes `connectedAndroidTest` (and Android Studio's runs of
+instrumented tests, which use it) fail before it installs anything. Run the test with the
+`ankiDroidDeviceTest` task instead, which installs both APKs, runs the test with `am instrument`,
+and fails unless the test passed:
 
 ```
-./gradlew assembleDebug assembleDebugAndroidTest
-adb install -r -t app/build/outputs/apk/debug/app-debug.apk
-adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w -e class io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidDeviceTest io.github.dokuendev.dokuen.plugins.dictionary.yomitan.test/androidx.test.runner.AndroidJUnitRunner
+./gradlew ankiDroidDeviceTest
 ```
 
 `am instrument` restarts the plugin's process, which the host does not recover from on its own:

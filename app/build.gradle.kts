@@ -1,3 +1,6 @@
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
+
 plugins {
     alias(libs.plugins.android.application)
     id("com.google.devtools.ksp") version "2.3.12"
@@ -134,4 +137,56 @@ tasks.register<JavaExec>("generateDebugEntries") {
     classpath(testTask.map { it.classpath })
     mainClass.set("io.github.dokuendev.dokuen.plugins.dictionary.yomitan.DebugGenerator")
     workingDir = rootProject.projectDir
+}
+
+val adbProvider = androidComponents.sdkComponents.adb
+
+tasks.register<Exec>("ankiDroidDeviceTest") {
+    group = "verification"
+    description = "Installs debug + androidTest APKs and runs AnkiDroidDeviceTest via am instrument (no uninstall)"
+
+    dependsOn("installDebug", "installDebugAndroidTest")
+
+    commandLine(
+        adbProvider.get().asFile.absolutePath,
+        "shell", "am", "instrument", "-w",
+        "-e", "class", "io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidDeviceTest",
+        "io.github.dokuendev.dokuen.plugins.dictionary.yomitan.test/androidx.test.runner.AndroidJUnitRunner"
+    )
+
+    // am instrument exits with 0 even when the class name matches no tests, so its exit code is not
+    // trusted. The output, which is shown as it arrives, is also kept and checked for JUnit's
+    // "OK (N tests)" with N of at least 1, which a failure or a crash doesn't print.
+    val output = ByteArrayOutputStream()
+    standardOutput = object : OutputStream() {
+        override fun write(b: Int) {
+            output.write(b)
+            System.out.write(b)
+        }
+
+        override fun flush() = System.out.flush()
+    }
+    doLast {
+        val passed = Regex("""^OK \([1-9]\d* tests?\)""", RegexOption.MULTILINE)
+            .containsMatchIn(output.toString(Charsets.UTF_8))
+        if (!passed) {
+            throw GradleException("AnkiDroidDeviceTest did not pass. See am instrument's output above.")
+        }
+    }
+}
+
+// connectedAndroidTest, which Android Studio also runs for instrumented tests, uninstalls the app
+// when it finishes and so deletes its installed dictionaries and settings. To prevent that, these
+// tasks are made to fail on purpose, before they install anything, with instructions for running
+// the tests with `am instrument` instead.
+tasks.named { it.startsWith("connected") && it.endsWith("AndroidTest") }.configureEach {
+    doFirst {
+        throw GradleException(
+            """
+            Don't run the instrumented tests with connectedAndroidTest or from Android Studio. Both
+            uninstall the app when they finish, which deletes its installed dictionaries and settings.
+            Use the ankiDroidDeviceTest task instead.
+            """.trimIndent()
+        )
+    }
 }
