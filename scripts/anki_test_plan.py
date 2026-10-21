@@ -1,30 +1,39 @@
 #!/usr/bin/env python3
-"""Sets up and checks the manual Anki export test plan (docs/anki-export/test-plan.md).
+"""Sets up and checks the Anki export test plan (docs/anki-export/test-plan.md), and captures
+the desktop reference it compares with (docs/anki-export/reference-capture.md).
 
-The plan runs in three parts: this script's "setup" command, the plan's manual steps, and this
-script's "check" command.
+The plan runs on Android only: this script's "setup" command, the plan's steps, and this
+script's "check" command, which compares AnkiDroid's notes with desktop Yomitan's, captured once
+and committed as scripts/anki_test_plan_reference.json.
 
-  setup   Builds and installs the plugin and its test helper, creates the decks and note types
-          in desktop Anki and in AnkiDroid, resets the plugin's Anki settings to the defaults,
-          checks the plugin's dictionaries, writes the desktop Yomitan settings file to import, and
-          serves the test page, which holds every word the plan looks up, to both platforms until
-          Enter is pressed. Refuses to run while AuditTest holds notes, unless --clean is given,
-          which deletes them on both platforms first.
-  serve   Serves the test page again, as setup does, for a plan resumed later.
-  check   Reads the plugin's stored Anki settings and every note in AuditTest from both platforms,
-          and makes every check of them the plan lists, reporting each under the plan's own
-          check ID (for example "C2.7" or "C7.10") with one of these statuses:
+  setup            Builds and installs the plugin and its test helper, creates the decks and note
+                   types in AnkiDroid, resets the plugin's Anki settings to the defaults, checks
+                   the plugin's dictionaries, and serves the test page, which holds every word the
+                   plan looks up, until Enter is pressed. Refuses to run while AuditTest holds
+                   notes, unless --clean is given, which deletes them first.
+  serve            Serves the test page again, as setup does, for a plan resumed later.
+  check            Reads the plugin's stored Anki settings and every note in AuditTest, compares
+                   the notes with the golden file's, and makes every check of them the plan lists,
+                   reporting each under the plan's own check ID (for example "C2.7" or "C7.10")
+                   with one of these statuses:
 
-            PASS    the check holds.
-            FAIL    the check does not hold; a finding, unless the plan lists it as a known exception.
-            RECORD  a value the plan says to record rather than compare; kept in the report.
-            REVIEW  the script cannot decide; a person has to look at the values in the report.
-            MISSING a note the check needs was not found on one or both platforms.
+                     PASS    the check holds.
+                     FAIL    the check does not hold; a finding, unless the plan lists it as a known exception.
+                     RECORD  a value the plan says to record rather than compare; kept in the report.
+                     REVIEW  the script cannot decide; a person has to look at the values in the report.
+                     MISSING a note the check needs was not found on one or both platforms.
 
-Desktop is reached through AnkiConnect. Android is reached through AnkiTestPlanHelper
-(app/src/androidTest/.../anki/AnkiTestPlanHelper.kt), instrumented tests that run inside the
-plugin's process, because the adb shell has no permission to read AnkiDroid's notes or the
-plugin's settings. Every such run restarts the plugin's process.
+                   Which checks apply depends on the SDK version of the host that last started
+                   the plugin, which the plugin records (the plan's R10).
+  reference-setup  For the reference capture: creates the decks and note types in desktop Anki
+                   and writes the desktop Yomitan settings file to import, then serves the test page.
+  reference-save   For the reference capture: writes desktop's AuditTest notes to the golden file,
+                   after checking that every note the plan adds is there exactly once.
+
+Desktop Anki is reached through AnkiConnect, by the two reference commands only. Android is
+reached through AnkiTestPlanHelper (app/src/androidTest/.../anki/AnkiTestPlanHelper.kt),
+instrumented tests that run inside the plugin's process, because the adb shell has no permission
+to read AnkiDroid's notes or the plugin's settings. Every such run restarts the plugin's process.
 
 check finds notes by their first field and the order they were added: T1 is the first AuditTerm
 note whose Expression is 食べる, T4 the second, and so on. Delete any note added by mistake
@@ -36,17 +45,22 @@ Each command writes its results to a new folder under --out, and exits with 1 if
 import argparse
 import base64
 import datetime
+import hashlib
 import html
 import html.parser
 import http.server
 import json
+import math
 import os
 import re
 import shlex
+import socket
 import struct
 import subprocess
 import sys
 import threading
+import time
+import urllib.parse
 import urllib.request
 import webbrowser
 import zlib
@@ -104,9 +118,28 @@ DICTIONARIES = [
     ('JPDBv2㋕', 'JPDB v2.2 Frequency Kana 2024-10-13'),
     ('BCCWJ', '1'),
 ]
+# The host SDK versions that bring images and clipboard text (CustomActionContext's action
+# requests) and readings (requestReadings). See the plan's R10.
+IMAGES_SDK = (0, 7, 0)
+READINGS_SDK = (0, 8, 0)
+
+
+def parse_sdk_version(text):
+    """'0.8.0' -> (0, 8, 0); '' (a host older than SDK 0.7.0, which sends no version) -> None."""
+    match = re.match(r'^(\d+)\.(\d+)\.(\d+)', text or '')
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def host_at_least(version, minimum):
+    parsed = parse_sdk_version(version)
+    return parsed is not None and parsed >= minimum
+
+
+def host_description(version):
+    return 'SDK %s' % version if parse_sdk_version(version) else 'older than SDK 0.7.0'
 # The test page (R5): every word the plan scans, each on a line of its own that ends with a
 # sentence terminator, so that both platforms cut the sentence at the line; then the paragraph T8
-# and K2 are scanned from; then the words only Phases 9, 11, 12, and 13 scan.
+# and K2 are scanned from; then the words only Phases 7, 9, 10, 11, 12, and 13 scan.
 PAGE_WORDS = ['食べる', '動き出す', 'お見舞い', '食べさせられた', '牛', '京都', '学習辞典', '時雨', '鳥居',
               '千鳥', '順路', '記号', '學校']
 TEST_PARAGRAPH = '雨が降っていた。電車が動き出す前に座った。窓の外は暗かった。'
@@ -217,6 +250,58 @@ KANJI_NOTES = {
     'K1': ('食', 1, None),
     'K2': ('動', 1, None),
 }
+# The third and fourth 食べる notes: the tagged note and the unknown-marker note, whose Reading is
+# the render error rather than a reading.
+TAGGED_NOTES = {
+    'TG': ('食べる', 3, 'たべる'),
+    'TB': ('食べる', 4, None),
+}
+# The words of the notes that each use one remote audio source alone: label -> (word, reading).
+# They were chosen on 2026-10-21 by asking each source as desktop Yomitan's audio-downloader.js
+# does: LanguagePod101 has 記号 (and Jisho.org does not), Jisho.org has 京都, and Lingua Libre has
+# one Japanese recording of 牛 (whose T5 note has no audio from the default sources). No word has a
+# Wiktionary file that desktop can find for Japanese, because Wikimedia Commons names nearly all of
+# them in romaji, which desktop's search pattern for a Japanese term never matches. AU4 therefore
+# expects no audio on both platforms; 京都, which other sources have, shows that no other source
+# was tried.
+AUDIO_WORDS = {
+    'AU1': ('記号', 'きごう'),
+    'AU2': ('京都', 'きょうと'),
+    'AU3': ('牛', 'ぎゅう'),
+    'AU4': ('京都', 'きょうと'),
+}
+# The audio notes, added after Phase 6's notes: label -> (first field, occurrence, Reading). Each
+# occurrence counts the notes with that first field in the order of the plan. The source setting of
+# each note:
+#   AU1 to AU4: the one remote source of AUDIO_WORDS, alone
+#   AU5: a Custom URL
+#   AU6: a Custom URL (JSON) list
+#   AU7: a missing Custom URL, then Jisho.org
+#   AU8: a missing Custom URL with the default sources on
+#   AU9: a Custom URL with an unknown Content-Type
+#   AU10: a stalling download with a 2000 ms timeout
+#   AU11: an unreachable port
+AUDIO_NOTES = {
+    'AU1': ('記号', 2, 'きごう'),
+    'AU2': ('京都', 3, 'きょうと'),
+    'AU3': ('牛', 2, 'ぎゅう'),
+    'AU4': ('京都', 4, 'きょうと'),
+    'AU5': ('食べる', 5, 'たべる'),
+    'AU6': ('食べる', 6, 'たべる'),
+    'AU7': ('京都', 5, 'きょうと'),
+    'AU8': ('食べる', 7, 'たべる'),
+    'AU9': ('食べる', 8, 'たべる'),
+    'AU10': ('食べる', 9, 'たべる'),
+    'AU11': ('食べる', 10, 'たべる'),
+}
+# The notes whose audio comes from a remote source, which may change its file after the capture.
+REMOTE_AUDIO_NOTES = (['T%d' % number for number in range(1, 9)] + ['T6b'] + list(SECTION5_NOTES)
+                      + ['TG', 'TB', 'AU1', 'AU2', 'AU3', 'AU4', 'AU7', 'AU8'])
+
+REFERENCE_FILE = os.path.join(REPO, 'scripts', 'anki_test_plan_reference.json')
+# Every note the reference capture adds: the 28 term notes above (T1 to T8, T6b, TG, TB, the six of
+# SECTION5_NOTES, and the eleven of AUDIO_NOTES) and the 2 kanji notes.
+REFERENCE_NOTE_COUNT = 30
 
 FURIGANA = {
     'T1': '<ruby>食<rt>た</rt></ruby>べる',
@@ -254,7 +339,7 @@ KANJI_SENTENCES = {
 SENTENCE_FIELDS = ['sentence', 'cloze-prefix', 'cloze-body', 'cloze-suffix', 'cloze-body-kana']
 SENTENCE_FURIGANA_FIELDS = ['sentence-furigana', 'sentence-furigana-plain']
 STUB_FIELDS = [
-    'audio', 'popup-selection-text', 'url', 'document-title', 'phonetic-transcriptions', 'pitch-accents',
+    'popup-selection-text', 'url', 'document-title', 'phonetic-transcriptions', 'pitch-accents',
     'pitch-accent-graphs', 'pitch-accent-graphs-jj', 'pitch-accent-positions', 'pitch-accent-categories',
 ]
 # Filled on each platform from its own screen and clipboard when the note is added, so recorded,
@@ -339,6 +424,11 @@ def run_adb(adb, serial, args, binary=False):
     return result.stdout if binary else result.stdout.decode('utf-8', 'replace')
 
 
+class UiAutomationBusy(RuntimeError):
+    """Another UI-automation client, such as uiautomator2's agent, holds the device's UI, which the
+    test helper needs to grant itself the AnkiDroid permission."""
+
+
 def run_helper(adb, serial, action, **arguments):
     """Runs one AnkiTestPlanHelper action on the device and returns the JSON it wrote."""
     output_file = 'files/anki-test-plan-%s.json' % action
@@ -348,6 +438,12 @@ def run_helper(adb, serial, action, **arguments):
         command += ['-e', name, value]
     command.append(HELPER_RUNNER)
     output = run_adb(adb, serial, ['shell', ' '.join(shlex.quote(part) for part in command)])
+    if 'already registered' in output:
+        raise UiAutomationBusy(
+            'The test helper\'s %s could not start: another UI-automation client holds the device\'s UI '
+            '("UiAutomationService ... already registered"). If anki_test_plan_android.py is running, '
+            'let it run this, or stop its agent first:\n'
+            '  python -c "import uiautomator2 as u; u.connect().stop_uiautomator()"' % action)
     if 'FAILURES!!!' in output or 'OK (' not in output:
         raise RuntimeError('The test helper\'s %s failed. Are the plugin and helper APKs from the same build '
                            'installed (setup does this)? Output:\n%s' % (action, output))
@@ -531,6 +627,8 @@ class Report:
     def __init__(self):
         self.results = []
         self.field_rows = []
+        # Lines written at the top of the report: what was compared with what.
+        self.header = []
 
     def add(self, step, status, subject, message, desktop=None, plugin=None):
         self.results.append({'step': step, 'status': status, 'subject': subject, 'message': message,
@@ -553,10 +651,12 @@ class Report:
 
     def write(self, folder):
         with open(os.path.join(folder, 'report.json'), 'w', encoding='utf-8') as out:
-            json.dump({'results': self.results, 'fields': self.field_rows},
+            json.dump({'header': self.header, 'results': self.results, 'fields': self.field_rows},
                       out, ensure_ascii=False, indent=1)
         with open(os.path.join(folder, 'report.md'), 'w', encoding='utf-8') as out:
             out.write('# Anki parity report\n\n')
+            for line in self.header:
+                out.write('%s\n\n' % line)
             out.write('| Step | Status | Note | Result |\n|---|---|---|---|\n')
             for result in self.results:
                 out.write('| %s | %s | %s | %s |\n' % (
@@ -673,7 +773,9 @@ def jmdict_ids(element):
 # Checks of the notes
 
 
-def check_term_notes(report, desktop, plugin):
+def check_term_notes(report, desktop, plugin, readings):
+    """readings: whether the host gives sentence furigana its readings (SDK 0.8.0 or later).
+    Without them the plugin prints the plain sentence (C4.5) instead of matching desktop (C2.20)."""
     pairs = pair(report, desktop, plugin, 'AuditTerm', TERM_NOTES)
 
     for label, (d, p) in pairs.items():
@@ -682,6 +784,8 @@ def check_term_notes(report, desktop, plugin):
             if field not in p.fields:
                 report.add('C2.22', 'FAIL', label, 'the plugin note has no field %s' % field)
                 continue
+            if field == 'audio':
+                continue  # compared by check_audio
             if label == 'T6b':
                 step = 'C5.3'
             else:
@@ -700,12 +804,16 @@ def check_term_notes(report, desktop, plugin):
                 status = 'PASS' if p_value == '' else 'FAIL'
                 if status == 'FAIL':
                     report.add('C2.21', 'FAIL', label, '%s should be empty on the plugin' % field, None, p_value)
-            elif field in SENTENCE_FURIGANA_FIELDS:
+            elif field in SENTENCE_FURIGANA_FIELDS and readings:
                 rule = 'identical apart from <span class="term"> boundaries'
                 status = 'PASS' if without_term_spans(d_value) == without_term_spans(p_value) else 'FAIL'
                 if status == 'FAIL':
                     report.add('C2.20', 'FAIL', label, '%s differs apart from term boundaries' % field,
                                d_value, p_value)
+            elif field in SENTENCE_FURIGANA_FIELDS:
+                rule = 'plugin equals its sentence (no readings below SDK 0.8.0)'
+                status = 'PASS' if p_value == p.get('sentence') else 'FAIL'
+                report.add('C4.5', status, label, 'plugin %s is the plain sentence' % field, None, p_value)
             elif field in STYLED_FIELDS + STYLED_FIRST_FIELDS:
                 rule = 'identical apart from <style> text and images'
                 styled_step = step if label == 'T6b' else ('C2.13' if field in STYLED_FIRST_FIELDS else 'C2.10')
@@ -805,7 +913,7 @@ def check_term_notes(report, desktop, plugin):
                   for field, value in note.fields.items() if '雨が降' in value or '窓の外' in value]
         report.add('C4.2', 'FAIL' if leaked else 'PASS', 'T8',
                    'the outer sentences appear in %s' % leaked if leaked else 'neither outer sentence appears')
-        for field, mark in (('sentence-furigana', '<ruby>'), ('sentence-furigana-plain', '[')):
+        for field, mark in (('sentence-furigana', '<ruby>'), ('sentence-furigana-plain', '[')) if readings else ():
             value = p.get(field) or ''
             report.add('C4.3', 'PASS' if mark in value else 'FAIL', 'T8',
                        'plugin %s carries readings' % field, None, value)
@@ -989,8 +1097,8 @@ def check_structured_content(report, desktop, plugin):
 def check_overwrite(report, plugin):
     notes = [note for note in plugin if note.model == 'AuditTerm' and note.first == OVERWRITE_WORD]
     if len(notes) != 2:
-        report.add('C8.2', 'FAIL', OVERWRITE_WORD, 'expected exactly 2 %s notes on the plugin (9.2, overwritten '
-                   'in 9.4, and 9.5), found %d' % (OVERWRITE_WORD, len(notes)))
+        report.add('C8.2', 'FAIL', OVERWRITE_WORD, 'expected exactly 2 %s notes on the plugin (7.2, overwritten '
+                   'in 7.4, and 7.5), found %d' % (OVERWRITE_WORD, len(notes)))
     if not notes:
         return
 
@@ -1072,6 +1180,13 @@ def check_plugin_settings(report, state):
                'the plugin ends with %s, expected %s' % (actual, final))
     report.add('C1.6', 'PASS' if settings.get('tags') == [] else 'FAIL', 'settings',
                'the plugin\'s card tags are %s, expected none' % settings.get('tags'))
+    audio = {key: settings.get(key) for key in ('audioSources', 'enableDefaultAudioSources',
+                                                'audioDownloadTimeoutMillis')}
+    restored = {'audioSources': [], 'enableDefaultAudioSources': True, 'audioDownloadTimeoutMillis': 0}
+    report.add('C1.7', 'PASS' if audio == restored else 'FAIL', 'settings',
+               'the plugin ends with audio settings %s, expected %s: a step that changed them did not restore them'
+               % (audio, restored) if audio != restored
+               else 'the audio settings are restored: no sources, the default sources on, and no timeout')
 
 
 def check_plugin_dictionaries(state):
@@ -1118,6 +1233,12 @@ def yomitan_settings(export_path):
                     for field, value in field_values(note_type, changes).items()}}
         for name, entry_type, deck, note_type, icon, changes, overwrite in CARD_FORMATS
     ]
+
+    # Pin the audio settings to a new desktop profile's defaults, so the capture does not depend
+    # on the tester's own audio settings.
+    profile['audio']['sources'] = []
+    profile['audio']['enableDefaultAudioSources'] = True
+    anki['downloadTimeout'] = 0
     return settings
 
 
@@ -1130,11 +1251,12 @@ def step(message):
     sys.stdout.flush()
 
 
-def command_setup(args, folder):
-    step('Checking the device and AnkiConnect')
+def setup_android(args):
+    """Prepares the device for the plan: builds and installs the plugin and its test helper,
+    empties AuditTest (with --clean), creates AnkiDroid's decks and note types, resets the
+    plugin's Anki settings, and checks its dictionaries. Returns the problems found."""
+    step('Checking the device')
     run_adb(args.adb, args.serial, ['get-state'])
-    print('AnkiConnect version %s' % anki_connect(args.anki_connect, 'version'))
-
     if not args.no_build:
         step('Building the plugin and the test helper')
         gradle = os.path.join(REPO, 'gradlew.bat' if os.name == 'nt' else 'gradlew')
@@ -1144,17 +1266,64 @@ def command_setup(args, folder):
         print(run_adb(args.adb, args.serial, ['install', '-r', '-t', apk]).strip())
 
     step('Looking for notes left in AuditTest')
-    desktop_ids = anki_connect(args.anki_connect, 'findNotes', query=DECK_QUERY)
-    plugin_count = len(run_helper(args.adb, args.serial, 'dumpNotes', query=DECK_QUERY)['notes'])
-    print('desktop: %d, Android: %d' % (len(desktop_ids), plugin_count))
-    if desktop_ids or plugin_count:
+    count = len(run_helper(args.adb, args.serial, 'dumpNotes', query=DECK_QUERY)['notes'])
+    print('Android: %d' % count)
+    if count:
         if not args.clean:
-            print('AuditTest must start empty. Run setup again with --clean to delete these notes on both platforms.')
-            return 1
-        if desktop_ids:
-            anki_connect(args.anki_connect, 'deleteNotes', notes=desktop_ids)
+            raise RuntimeError('AuditTest must start empty. Run setup again with --clean to delete these notes.')
         deleted = run_helper(args.adb, args.serial, 'deleteNotes', query=DECK_QUERY)['deleted']
-        print('Deleted %d desktop and %d Android notes' % (len(desktop_ids), deleted))
+        print('Deleted %d Android notes' % deleted)
+
+    problems = []
+    step('Creating the decks and note types in AnkiDroid')
+    spec = base64.b64encode(json.dumps({'decks': DECKS, 'models': NOTE_TYPES}).encode('utf-8')).decode('ascii')
+    result = run_helper(args.adb, args.serial, 'setupCollection', spec=spec)
+    for note_type in NOTE_TYPES:
+        created = result['models'].get(note_type['name'], {})
+        print('%s: %s' % (note_type['name'], 'created' if created.get('created') else 'exists'))
+        if created.get('fields') != note_type['fields']:
+            problems.append('Android note type %s has fields %s, expected %s' % (
+                note_type['name'], created.get('fields'), note_type['fields']))
+
+    step('Resetting the Anki settings of the plugin to the defaults')
+    run_helper(args.adb, args.serial, 'resetAnkiSettings')
+
+    step('Checking the plugin\'s dictionaries')
+    problems += check_plugin_dictionaries(run_helper(args.adb, args.serial, 'dumpPluginState'))
+    return problems
+
+
+def report_problems(problems, done):
+    if problems:
+        step('Setup found problems')
+        for problem in problems:
+            print('FAIL: %s' % problem)
+        return 1
+    step('Setup complete')
+    print(done)
+    return 0
+
+
+def command_setup(args, folder):
+    if report_problems(setup_android(args), 'The device is ready for Phase 3.'):
+        return 1
+    return command_serve(args, folder)
+
+
+def command_reference_setup(args, folder):
+    """The desktop side, for the reference capture: AnkiConnect, desktop decks and note types,
+    and the Yomitan settings file to import."""
+    step('Checking AnkiConnect')
+    print('AnkiConnect version %s' % anki_connect(args.anki_connect, 'version'))
+    step('Looking for notes left in AuditTest')
+    ids = anki_connect(args.anki_connect, 'findNotes', query=DECK_QUERY)
+    print('desktop: %d' % len(ids))
+    if ids:
+        if not args.clean:
+            print('AuditTest must start empty. Run reference-setup again with --clean to delete these notes.')
+            return 1
+        anki_connect(args.anki_connect, 'deleteNotes', notes=ids)
+        print('Deleted %d desktop notes' % len(ids))
 
     step('Creating the decks and note types in desktop Anki')
     problems = []
@@ -1173,43 +1342,52 @@ def command_setup(args, folder):
         if fields != spec['fields']:
             problems.append('desktop note type %s has fields %s, expected %s' % (spec['name'], fields, spec['fields']))
 
-    step('Creating the decks and note types in AnkiDroid')
-    spec = base64.b64encode(json.dumps({'decks': DECKS, 'models': NOTE_TYPES}).encode('utf-8')).decode('ascii')
-    result = run_helper(args.adb, args.serial, 'setupCollection', spec=spec)
-    for note_type in NOTE_TYPES:
-        created = result['models'].get(note_type['name'], {})
-        print('%s: %s' % (note_type['name'], 'created' if created.get('created') else 'exists'))
-        if created.get('fields') != note_type['fields']:
-            problems.append('Android note type %s has fields %s, expected %s' % (
-                note_type['name'], created.get('fields'), note_type['fields']))
-
-    step('Resetting the Anki settings of the plugin to the defaults')
-    run_helper(args.adb, args.serial, 'resetAnkiSettings')
-
-    step('Checking the plugin\'s dictionaries')
-    problems += check_plugin_dictionaries(run_helper(args.adb, args.serial, 'dumpPluginState'))
-
     step('Writing the desktop Yomitan settings to import')
     settings_path = os.path.join(folder, 'yomitan-settings-anki-test-plan.json')
     with open(settings_path, 'w', encoding='utf-8') as out:
         json.dump(yomitan_settings(args.yomitan_settings), out, ensure_ascii=False, indent=1)
     print(os.path.abspath(settings_path))
+    if report_problems(problems, 'Import %s into desktop Yomitan.' % os.path.abspath(settings_path)):
+        return 1
+    return command_serve(args, folder)
 
+
+def command_reference_save(args, folder):
+    """Writes the golden file from desktop's AuditTest notes, after the reference capture's adds."""
+    notes = desktop_notes(args.anki_connect)
+    report = Report()
+    for model, specs in (('AuditTerm', TERM_NOTES), ('AuditTerm', SECTION5_NOTES), ('AuditTerm', TAGGED_NOTES),
+                         ('AuditTerm', AUDIO_NOTES), ('AuditKanji', KANJI_NOTES)):
+        pair(report, notes, notes, model, specs)
+    # pair() looks each note up twice, as desktop and as plugin; both halves are desktop's here.
+    problems = ['%s: %s' % (result['subject'], result['message']) for result in report.results
+                if 'desktop' in result['message']]
+    if len(notes) != REFERENCE_NOTE_COUNT:
+        problems.append('AuditTest holds %d notes, expected %d' % (len(notes), REFERENCE_NOTE_COUNT))
     if problems:
-        step('Setup found problems')
         for problem in problems:
             print('FAIL: %s' % problem)
+        print('Nothing written; %s is unchanged.' % REFERENCE_FILE)
         return 1
-    step('Setup complete')
-    print('Import %s into desktop Yomitan in step 4.1.' % os.path.abspath(settings_path))
-    return command_serve(args, folder)
+    reference = {
+        'captured': datetime.date.today().isoformat(),
+        'yomitan_version': args.yomitan_version,
+        'anki_connect_version': anki_connect(args.anki_connect, 'version'),
+        'dictionaries': [{'title': title, 'revision': revision} for title, revision in DICTIONARIES],
+        'notes': [note.to_json() for note in notes],
+    }
+    with open(REFERENCE_FILE, 'w', encoding='utf-8') as out:
+        json.dump(reference, out, ensure_ascii=False, indent=1)
+        out.write('\n')
+    print('Wrote %d notes to %s' % (len(notes), REFERENCE_FILE))
+    return 0
 
 
 IMAGE_NAME = 'anki-test-image.png'
 
 
 def test_image_png(width=240, height=160):
-    """A small PNG of colored stripes, which step 13.11 copies in Chrome to put an image on the
+    """A small PNG of colored stripes, which step 13.9 copies in Chrome to put an image on the
     clipboard."""
     rows = b''.join(b'\x00' + b''.join(bytes((40 + (x // 30) * 25 % 200, 120, 200 - y)) for x in range(width))
                     for y in range(height))
@@ -1220,19 +1398,81 @@ def test_image_png(width=240, height=160):
             + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
 
 
-def start_page_server(port):
+AUDIO_TERM = '食べる'
+AUDIO_READING = 'たべる'
+
+# Nothing listens here during the test plan, so a source that points at it fails with a refused
+# connection (the "closed" source in audio_urls).
+CLOSED_PORT = 8767
+
+# How long the stalling endpoints wait before closing the connection. The first sends part of an
+# audio file and then goes quiet, to exercise the plugin's idle download timeout. The second never
+# answers a lookup at all. Both are longer than the timeouts they exercise.
+AUDIO_STALL_SECONDS = 20
+AUDIO_LOOKUP_STALL_SECONDS = 60
+AUDIO_STALL_SENT_BYTES = 16
+AUDIO_STALL_LENGTH = 4000
+
+
+def audio_urls(port):
+    """The audio source URLs the test notes use, for a test page server on port. The {language},
+    {term}, and {reading} placeholders are left for the audio source to fill in."""
+    base = 'http://localhost:%d/audio/' % port
+    return {
+        'custom': base + 'custom/{language}/{term}/{reading}',
+        'json': base + 'list/{term}',
+        'missing': base + 'missing',
+        'unknown_type': base + 'file/unknown',
+        'stall': base + 'stall',
+        'json_stall': base + 'list-stall/{term}',
+        'closed': 'http://localhost:%d/audio/closed' % CLOSED_PORT,
+    }
+
+
+def test_audio_wav(frequency, milliseconds):
+    """A mono 8 kHz 16-bit PCM WAV of a sine tone, the same bytes for the same arguments."""
+    rate = 8000
+    count = rate * milliseconds // 1000
+    samples = b''.join(struct.pack('<h', int(12000 * math.sin(2 * math.pi * frequency * i / rate)))
+                       for i in range(count))
+    header = (b'RIFF' + struct.pack('<I', 36 + len(samples)) + b'WAVEfmt '
+              + struct.pack('<IHHIIHH', 16, 1, 1, rate, rate * 2, 2, 16)
+              + b'data' + struct.pack('<I', len(samples)))
+    return header + samples
+
+
+def start_page_server(port, print_audio_requests=False):
     """Serves the test page on port, in a background thread, and returns the server.
 
-    Besides the page and an image for step 13.11 to copy (IMAGE_NAME), the server relays between
+    Besides the page and an image for step 13.9 to copy (IMAGE_NAME), the server relays between
     scripts/anki_test_plan_android.py and the page in Chrome on the device (see PAGE_SCRIPT):
     POST /control/command takes {"line", "text", "scale"} and returns the command's {"id"}; the
     page polls GET /control/command?after=<id> for a newer command and posts where the text is to
     POST /control/layout, which GET /control/layout?id=<id> then returns.
+
+    Under /audio/ it serves the local audio sources that audio_urls describes, including two that
+    stall. Every /audio/ request is appended to server.audio_requests as {'path', 'time',
+    'expected'}, where 'expected' is False for a path the server has no audio for. With
+    print_audio_requests, each one is also printed, for a tester doing the plan by hand.
     """
+    try:
+        socket.create_connection(('127.0.0.1', CLOSED_PORT), timeout=1).close()
+    except OSError:
+        pass
+    else:
+        raise RuntimeError('Something is listening on port %d, which the test plan needs to be closed.'
+                           % CLOSED_PORT)
     page = PAGE_HTML.encode('utf-8')
     image = test_image_png()
     state = {'command': None, 'layouts': {}}
     lock = threading.Lock()
+    audio = {'mpeg': test_audio_wav(440, 300), 'ogg': test_audio_wav(660, 300),
+             'unknown': test_audio_wav(880, 300)}
+    custom_path = '/audio/custom/ja/%s/%s' % (urllib.parse.quote(AUDIO_TERM), urllib.parse.quote(AUDIO_READING))
+    audio_list = json.dumps({'type': 'audioSourceList', 'audioSources': [
+        {'url': audio_urls(port)['missing']},
+        {'url': 'http://localhost:%d/audio/file/ogg' % port, 'name': 'test'},
+    ]}).encode('utf-8')
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def reply(self, status, body=b'', content_type='application/json'):
@@ -1243,8 +1483,47 @@ def start_page_server(port):
             self.end_headers()
             self.wfile.write(body)
 
+        def audio_reply(self, path):
+            """Answers a GET under /audio/. The stalling answers wait without holding the lock."""
+            expected = True
+            if path == custom_path:
+                answer = (200, audio['mpeg'], 'audio/mpeg')
+            elif path.startswith('/audio/list/'):
+                answer = (200, audio_list, 'application/json')
+            elif path == '/audio/file/ogg':
+                answer = (200, audio['ogg'], 'audio/ogg')
+            elif path == '/audio/file/unknown':
+                answer = (200, audio['unknown'], 'application/octet-stream')
+            elif path == '/audio/stall' or path.startswith('/audio/list-stall/'):
+                answer = None
+            else:
+                expected = False
+                answer = (404, b'', 'text/plain')
+            with lock:
+                server.audio_requests.append({'path': self.path, 'time': time.time(), 'expected': expected})
+            if print_audio_requests:
+                print('Audio request: %s (%s)' % (self.path, 'expected' if expected else
+                                                  'unexpected, since the server has no audio for it'))
+            if answer:
+                self.reply(*answer)
+                return
+            self.close_connection = True
+            if path == '/audio/stall':
+                self.send_response(200)
+                self.send_header('Content-Type', 'audio/mpeg')
+                self.send_header('Content-Length', str(AUDIO_STALL_LENGTH))
+                self.end_headers()
+                self.wfile.write(audio['mpeg'][:AUDIO_STALL_SENT_BYTES])
+                self.wfile.flush()
+                time.sleep(AUDIO_STALL_SECONDS)
+            else:
+                time.sleep(AUDIO_LOOKUP_STALL_SECONDS)
+
         def do_GET(self):
             path, _, query = self.path.partition('?')
+            if path.startswith('/audio/'):
+                self.audio_reply(path)
+                return
             number = int(query.split('=', 1)[1]) if '=' in query else 0
             with lock:
                 if path == '/' + PAGE_NAME:
@@ -1278,6 +1557,7 @@ def start_page_server(port):
             pass
 
     server = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    server.audio_requests = []
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -1291,25 +1571,131 @@ def open_page_on_device(adb, serial, port):
     return url
 
 
+def serve_page(args):
+    """Serves the test page in the background and opens it in Chrome on the device; returns the
+    server, which stop_serving stops."""
+    server = start_page_server(args.port, print_audio_requests=True)
+    open_page_on_device(args.adb, args.serial, args.port)
+    return server
+
+
+def stop_serving(args, server):
+    server.shutdown()
+    run_adb(args.adb, args.serial, ['reverse', '--remove', 'tcp:%d' % args.port])
+
+
 def command_serve(args, folder):
     step('Serving the test page')
-    server = start_page_server(args.port)
-    url = open_page_on_device(args.adb, args.serial, args.port)
+    server = serve_page(args)
+    url = 'http://localhost:%d/%s' % (args.port, PAGE_NAME)
     webbrowser.open(url)
     print('Opened %s in the desktop browser and in Chrome on the device.' % url)
-    print('Leave this running until Phase 13 is done (every lookup scans this page), then press Enter.')
+    print('Each request to the local audio sources (R5) is printed below as it arrives.')
+    print('Leave this running until every scan of the plan is done, then press Enter.')
     try:
         input()
     except (EOFError, KeyboardInterrupt):
         pass
-    server.shutdown()
-    run_adb(args.adb, args.serial, ['reverse', '--remove', 'tcp:%d' % args.port])
+    stop_serving(args, server)
     return 0
 
 
+# Where AnkiDroid keeps its media files: its app folder, or, on devices it was installed on long ago,
+# the legacy shared folder.
+ANKI_MEDIA_FOLDERS = ['/sdcard/Android/data/com.ichi2.anki/files/AnkiDroid/collection.media',
+                      '/sdcard/AnkiDroid/collection.media']
+
+
+def pull_anki_media(adb, serial, name, folder):
+    """Copies a media file from AnkiDroid's media folder on the device into the local folder,
+    and returns the local path, or None when AnkiDroid has no such file."""
+    local = os.path.join(folder, name)
+    os.makedirs(folder, exist_ok=True)
+    for source in ANKI_MEDIA_FOLDERS:
+        try:
+            run_adb(adb, serial, ['pull', '%s/%s' % (source, name), local])
+            return local
+        except RuntimeError:
+            continue
+    return None
+
+
+SOUND_PATTERN = re.compile(r'\[sound:([^\]/]+)\]')
+ANKIDROID_MEDIA_SUFFIX = re.compile(r'^(yomitan_audio_[0-9a-f]{40})_\d+(\.\w+)$')
+
+
+def sound_file(value):
+    """The file name in a value that is exactly [sound:NAME], or None for any other value."""
+    match = SOUND_PATTERN.fullmatch(value)
+    return match.group(1) if match else None
+
+
+def desktop_sound_name(name):
+    """The name desktop gives the file AnkiDroid stored as name: without AnkiDroid's numeric suffix,
+    and with .ogg in place of the .oga that AnkiDroid gives Ogg."""
+    name = ANKIDROID_MEDIA_SUFFIX.sub(r'\1\2', name)
+    return name[:-4] + '.ogg' if name.endswith('.oga') else name
+
+
+def check_audio(report, desktop, plugin, media, captured):
+    """Compares each note's audio field: the plugin's file must be the one desktop stored, by name
+    (which holds its SHA-1) and by content. media(name) returns the bytes of AnkiDroid's file, or None."""
+    rule = 'same file as desktop\'s (C11)'
+    # A lookup failure is reported here only for the notes no other check looks up (TG and the audio
+    # notes). The other lookups go to a discarded report, so that each failure appears once.
+    groups = ((TERM_NOTES, False), (SECTION5_NOTES, False), ({'TG': TAGGED_NOTES['TG']}, True),
+              ({'TB': TAGGED_NOTES['TB']}, False), (AUDIO_NOTES, True))
+    for specs, reported in groups:
+        lookup = pair(report if reported else Report(), desktop, plugin, 'AuditTerm', specs)
+        for label, (d, p) in lookup.items():
+            d_value, p_value = d.get('audio'), p.get('audio')
+            name = sound_file(p_value)
+            if d_value == '' and p_value == '':
+                same = True
+            else:
+                same = name is not None and '[sound:%s]' % desktop_sound_name(name) == d_value
+            status = 'PASS' if same else 'FAIL'
+            if same:
+                report.add('C11.1', 'PASS', label, 'audio is the same file name on both')
+            else:
+                message = 'audio differs'
+                if label in REMOTE_AUDIO_NOTES:
+                    message += '; the source may have changed its file since the capture on %s' % captured
+                report.add('C11.1', 'FAIL', label, message, d_value, p_value)
+            if name is not None:
+                content = media(name)
+                digest = re.search(r'yomitan_audio_([0-9a-f]{40})', name or '')
+                if content is None:
+                    report.add('C11.2', 'MISSING', label, 'AnkiDroid has no media file %s' % name, None, p_value)
+                    status = 'MISSING'
+                elif digest and hashlib.sha1(content).hexdigest() == digest.group(1):
+                    report.add('C11.2', 'PASS', label, 'the file\'s SHA-1 is the one in its name')
+                else:
+                    report.add('C11.2', 'FAIL', label, 'the file\'s SHA-1 is not the one in its name %s' % name,
+                               None, p_value)
+                    status = 'FAIL'
+            report.field(label, 'audio', rule, status, d_value, p_value)
+
+
+def load_reference(path):
+    """The golden file: its provenance, and desktop's notes as Note objects."""
+    with open(path, encoding='utf-8') as source:
+        reference = json.load(source)
+    notes = [Note(item['id'], item['model'], item['fields'], item['tags']) for item in reference['notes']]
+    return reference, notes
+
+
 def command_check(args, folder):
-    desktop = desktop_notes(args.anki_connect)
+    if not os.path.exists(args.reference):
+        raise RuntimeError('No golden file at %s: do the reference capture '
+                           '(docs/anki-export/reference-capture.md) first' % args.reference)
+    reference, desktop = load_reference(args.reference)
     state = run_helper(args.adb, args.serial, 'dumpPluginState')
+    host = state.get('hostSdkVersion')
+    if host is None:
+        raise RuntimeError('No Dokuen session has started the plugin since its data was created, so its '
+                           'host\'s SDK version is not known. Start a Dokuen session, scan anything, and run '
+                           'the check again.')
     plugin = android_notes(args.adb, args.serial)
     for name, content in (('desktop-notes.json', [note.to_json() for note in desktop]),
                           ('android-notes.json', [note.to_json() for note in plugin]),
@@ -1318,8 +1704,29 @@ def command_check(args, folder):
             json.dump(content, out, ensure_ascii=False, indent=1)
 
     report = Report()
+    readings = host_at_least(host, READINGS_SDK)
+    images = host_at_least(host, IMAGES_SDK)
+    report.header = [
+        'Reference: desktop Yomitan %s, captured %s.' % (reference.get('yomitan_version'), reference.get('captured')),
+        'Host: %s. Sentence furigana is checked %s.' % (
+            host_description(host), 'against desktop (C2.20, C4.3)' if readings else 'as the plain sentence (C4.5)'),
+        'Next: Phase 13 with Dokuen Pro, or Phase 12 without it.' if images
+        else 'Next: Phase 11 (a host older than SDK 0.7.0).',
+    ]
+    for line in report.header:
+        print(line)
+    print()
     check_plugin_settings(report, state)
-    check_term_notes(report, desktop, plugin)
+    check_term_notes(report, desktop, plugin, readings)
+
+    def media(name):
+        local = pull_anki_media(args.adb, args.serial, name, os.path.join(folder, 'media'))
+        if local is None:
+            return None
+        with open(local, 'rb') as source:
+            return source.read()
+
+    check_audio(report, desktop, plugin, media, reference.get('captured'))
     check_kanji_notes(report, desktop, plugin)
     check_structured_content(report, desktop, plugin)
     check_overwrite(report, plugin)
@@ -1334,25 +1741,34 @@ def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--anki-connect', default='http://127.0.0.1:8765', help='AnkiConnect URL')
+    parser.add_argument('--anki-connect', default='http://127.0.0.1:8765',
+                        help='AnkiConnect URL (for the reference commands)')
     parser.add_argument('--adb', default='adb', help='path to adb')
     parser.add_argument('--serial', help='adb device serial, when several devices are connected')
     parser.add_argument('--out', default='anki-test-plan-reports', help='folder for results')
     parser.add_argument('--port', type=int, default=8766, help='port the test page is served on')
     commands = parser.add_subparsers(dest='command', required=True)
-    setup = commands.add_parser('setup', help='prepare both platforms before the manual steps')
-    setup.add_argument('--yomitan-settings', required=True,
-                       help='a settings file exported from desktop Yomitan (Settings, Backup, Export)')
-    setup.add_argument('--clean', action='store_true', help='delete every note in AuditTest on both platforms')
+    setup = commands.add_parser('setup', help='prepare the device before the plan\'s steps')
+    setup.add_argument('--clean', action='store_true', help='delete every note in AuditTest in AnkiDroid')
     setup.add_argument('--no-build', action='store_true', help='install the APKs already built')
     commands.add_parser('serve', help='serve the test page again')
-    commands.add_parser('check', help='check the notes and settings after the manual steps')
+    check = commands.add_parser('check', help='check the notes and settings after the plan\'s steps')
+    check.add_argument('--reference', default=REFERENCE_FILE, help='the golden file of desktop notes')
+    reference_setup = commands.add_parser('reference-setup', help='prepare desktop Anki for the reference capture')
+    reference_setup.add_argument('--yomitan-settings', required=True,
+                                 help='a settings file exported from desktop Yomitan (Settings, Backup, Export)')
+    reference_setup.add_argument('--clean', action='store_true', help='delete every note in desktop AuditTest')
+    reference_save = commands.add_parser('reference-save', help='write the golden file from desktop\'s notes')
+    reference_save.add_argument('--yomitan-version', required=True,
+                                help='the desktop Yomitan version, such as 26.9.8.0')
     args = parser.parse_args()
 
     folder = os.path.join(args.out, '%s-%s' % (datetime.datetime.now().strftime('%Y%m%d-%H%M%S'), args.command))
     os.makedirs(folder, exist_ok=True)
     try:
-        return {'setup': command_setup, 'serve': command_serve, 'check': command_check}[args.command](args, folder)
+        return {'setup': command_setup, 'serve': command_serve, 'check': command_check,
+                'reference-setup': command_reference_setup,
+                'reference-save': command_reference_save}[args.command](args, folder)
     except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
         print('\nERROR: %s' % error)
         return 1

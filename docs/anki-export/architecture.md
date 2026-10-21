@@ -746,21 +746,27 @@ restart the plugin's service in the host afterwards.
 
 For the manual, device-level verification procedure (setup, pinned revisions of five real
 dictionaries as test data, and step-by-step parity checks against desktop Yomitan), see
-[`test-plan.md`](test-plan.md).
+[`test-plan.md`](test-plan.md). It runs on Android only. Desktop Yomitan's side, the reference, is
+captured once per desktop Yomitan version or dictionary revision by
+[`reference-capture.md`](reference-capture.md) and committed as
+`scripts/anki_test_plan_reference.json`. [`test-plan-runner.md`](test-plan-runner.md) describes
+`scripts/anki_test_plan_android.py`, which does the plan on a connected device.
 
-That plan is driven by `scripts/anki_test_plan.py`. Its `setup` command, run before the manual
+That plan is driven by `scripts/anki_test_plan.py`. Its `setup` command, run before the plan's
 steps, builds and installs the plugin and its test helper, creates the plan's decks and note types
-on both platforms, resets the plugin's Anki settings to the defaults, checks the plugin's
-dictionaries, writes the desktop Yomitan settings to import, and serves the plan's test page, which
-every lookup of the plan scans, to both platforms. Its `check` command, run after them, reads
-the plugin's stored Anki settings and every note the plan added from both platforms and makes the
-plan's checks, reporting each result under the plan's check ID.
+in AnkiDroid, resets the plugin's Anki settings to the defaults, checks the plugin's dictionaries,
+and serves the plan's test page, which every lookup of the plan scans. Its `check` command, run
+after them, reads the plugin's stored Anki settings and every note the plan added, compares the
+notes with the committed desktop notes, and makes the plan's checks, reporting each result under
+the plan's check ID. Which checks apply depends on the SDK version of the host that last started
+the plugin, which `onInitialize` saves in the plugin's preferences (`HOST_SDK_VERSION_PREF`). Its
+`reference-setup` and `reference-save` commands do the desktop side of the reference capture,
+through AnkiConnect.
 
-The script reaches desktop Anki through AnkiConnect. The adb shell has no permission to query
-AnkiDroid's provider or to read the plugin's settings, so on Android it runs
-`AnkiTestPlanHelper`, instrumented tests in `app/src/androidTest/.../anki/` that run in the
-plugin's own process. Each test is one action (dump or delete the notes matching a search, create
-decks and note types, reset the plugin's Anki settings, dump the plugin's dictionaries and
-settings), chosen by the `action` instrumentation argument and skipped unless named, so running
+The adb shell has no permission to query AnkiDroid's provider or to read the plugin's settings, so
+on Android the script runs `AnkiTestPlanHelper`, instrumented tests in
+`app/src/androidTest/.../anki/` that run in the plugin's own process. Each test is one action (dump or delete the notes matching a search, add a
+note, create decks and note types, reset the plugin's Anki settings, dump the plugin's
+dictionaries, settings, and host SDK version), chosen by the `action` instrumentation argument and skipped unless named, so running
 the other instrumented tests runs none of them. Each writes its result as JSON to the app's files directory, which the script reads
 back with `run-as`. Like any `am instrument` run, each restarts the plugin's process.
