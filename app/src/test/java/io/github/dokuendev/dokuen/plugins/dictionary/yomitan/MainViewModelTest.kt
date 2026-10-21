@@ -3,6 +3,8 @@ package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioSource
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioSourceType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
@@ -799,5 +801,34 @@ class MainViewModelTest {
         assertEquals(100, viewModel.uiState.value.ankiSettings.screenshotQuality)
         viewModel.setAnkiScreenshotQuality(-5)
         assertEquals(0, viewModel.uiState.value.ankiSettings.screenshotQuality)
+    }
+
+    @Test
+    fun testAudioSettingSettersPersistAndUpdateState() {
+        app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        val viewModel = MainViewModel(app)
+
+        viewModel.updateAnkiAudioSources { it + AnkiAudioSource(AnkiAudioSourceType.JISHO) }
+        viewModel.setAnkiEnableDefaultAudioSources(false)
+        viewModel.setAnkiAudioDownloadTimeout(2500)
+
+        val expectedSources = listOf(AnkiAudioSource(AnkiAudioSourceType.JISHO))
+        val state = viewModel.uiState.value.ankiSettings
+        assertEquals(expectedSources, state.audioSources)
+        assertEquals(false, state.enableDefaultAudioSources)
+        assertEquals(2500, state.audioDownloadTimeoutMillis)
+        val reloaded = AnkiSettingsStore.load(app)
+        assertEquals(expectedSources, reloaded.audioSources)
+        assertEquals(false, reloaded.enableDefaultAudioSources)
+        assertEquals(2500, reloaded.audioDownloadTimeoutMillis)
+    }
+
+    @Test
+    fun testAudioDownloadTimeoutIsNeverNegative() {
+        val viewModel = MainViewModel(app)
+
+        viewModel.setAnkiAudioDownloadTimeout(-1)
+
+        assertEquals(0, viewModel.uiState.value.ankiSettings.audioDownloadTimeoutMillis)
     }
 }

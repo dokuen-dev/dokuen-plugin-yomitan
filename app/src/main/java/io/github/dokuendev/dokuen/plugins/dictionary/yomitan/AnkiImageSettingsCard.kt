@@ -108,7 +108,7 @@ fun AnkiImageSettingsCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <T> SettingDropdown(
+internal fun <T> SettingDropdown(
     label: String,
     selected: T,
     options: List<T>,

@@ -150,4 +150,55 @@ class AnkiSettingsStoreTest {
         assertEquals(AnkiScreenshotFormat.PNG, loaded.screenshotFormat)
         assertEquals(92, loaded.screenshotQuality)
     }
+
+    @Test
+    fun testAudioDefaultsAreTheOriginals() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+        val loaded = AnkiSettingsStore.load(app)
+
+        // The defaults of a new desktop profile (options-schema.json): audio.sources,
+        // audio.enableDefaultAudioSources, and anki.downloadTimeout.
+        assertEquals(emptyList<AnkiAudioSource>(), loaded.audioSources)
+        assertTrue(loaded.enableDefaultAudioSources)
+        assertEquals(0, loaded.audioDownloadTimeoutMillis)
+    }
+
+    @Test
+    fun testSettingsSavedBeforeAudioExistedLoadTheAudioDefaults() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE).edit()
+            .putString("anki_settings", """{"enabled":true,"cardFormats":[],"tags":["mine"]}""")
+            .commit()
+
+        val loaded = AnkiSettingsStore.load(app)
+
+        assertTrue(loaded.enabled)
+        assertEquals(listOf("mine"), loaded.tags)
+        assertEquals(emptyList<AnkiAudioSource>(), loaded.audioSources)
+        assertTrue(loaded.enableDefaultAudioSources)
+        assertEquals(0, loaded.audioDownloadTimeoutMillis)
+    }
+
+    @Test
+    fun testAudioSettingsRoundTrip() {
+        val app: Application = ApplicationProvider.getApplicationContext()
+        val settings = AnkiSettings(
+            audioSources = listOf(
+                AnkiAudioSource(AnkiAudioSourceType.CUSTOM_JSON, "http://localhost:5050/?term={term}"),
+                AnkiAudioSource(AnkiAudioSourceType.JISHO)
+            ),
+            enableDefaultAudioSources = false,
+            audioDownloadTimeoutMillis = 2500
+        )
+
+        AnkiSettingsStore.save(app, settings)
+
+        assertEquals(settings, AnkiSettingsStore.load(app))
+        val raw = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE).getString("anki_settings", null)!!
+        for (key in listOf("audioSources", "enableDefaultAudioSources", "audioDownloadTimeoutMillis")) {
+            assertTrue(raw, raw.contains("\"$key\""))
+        }
+    }
 }

@@ -64,8 +64,6 @@ data class AnkiCardFormat(
  * - Suspend new cards / force Anki sync on adding a card: AddContentApi exposes no method
  *   for suspending cards or forcing a sync (confirmed against the AnkiDroid API's shipped
  *   sources), a genuine API-surface gap rather than a tradeoff.
- * - Audio download timeout: not yet applicable since the {audio} template marker has no real
- *   implementation yet (see docs/anki-export.md), so revisit if/when it ships.
  *
  * Showing existing-note tags/flags before the user taps "Add" is also deliberately not
  * implemented: it would need one AnkiDroid ContentProvider round-trip per configured card
@@ -92,5 +90,20 @@ data class AnkiSettings(
     val screenshotBehavior: AnkiScreenshotBehavior = AnkiScreenshotBehavior.FULL_SCREEN,
     val screenshotFormat: AnkiScreenshotFormat = AnkiScreenshotFormat.PNG,
     /** JPEG quality, 0 to 100; unused for PNG. */
-    val screenshotQuality: Int = 92
+    val screenshotQuality: Int = 92,
+    /**
+     * The sources `{audio}` tries, in order (the original's `audio.sources`, which is empty by
+     * default).
+     */
+    val audioSources: List<AnkiAudioSource> = emptyList(),
+    /**
+     * Whether `{audio}` also tries the language's default sources after [audioSources] (the
+     * original's `audio.enableDefaultAudioSources`). See AnkiLanguages.requiredAudioSources.
+     */
+    val enableDefaultAudioSources: Boolean = true,
+    /**
+     * How long, in milliseconds, an audio download may go without progress before it is
+     * cancelled, where 0 means no limit (the original's `anki.downloadTimeout`).
+     */
+    val audioDownloadTimeoutMillis: Int = 0
 )

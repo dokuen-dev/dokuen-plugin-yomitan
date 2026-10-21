@@ -863,7 +863,7 @@ fun DictionariesPage(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.KeyboardArrowUp,
-                                                contentDescription = stringResource(R.string.content_description_move_up),
+                                                contentDescription = stringResource(R.string.move_up),
                                                 tint = if (index > 0) NeonTeal else TextGray.copy(alpha = 0.3f),
                                                 modifier = Modifier.size(20.dp)
                                             )
@@ -875,7 +875,7 @@ fun DictionariesPage(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.KeyboardArrowDown,
-                                                contentDescription = stringResource(R.string.content_description_move_down),
+                                                contentDescription = stringResource(R.string.move_down),
                                                 tint = if (index < uiState.installedDictionaries.size - 1) NeonTeal else TextGray.copy(
                                                     alpha = 0.3f
                                                 ),
@@ -1255,6 +1255,16 @@ fun AnkiExportPage(
                     onScreenshotBehaviorChange = viewModel::setAnkiScreenshotBehavior,
                     onScreenshotFormatChange = viewModel::setAnkiScreenshotFormat,
                     onScreenshotQualityChange = viewModel::setAnkiScreenshotQuality
+                )
+            }
+            item {
+                AnkiAudioSettingsCard(
+                    sources = uiState.ankiSettings.audioSources,
+                    enableDefaultAudioSources = uiState.ankiSettings.enableDefaultAudioSources,
+                    downloadTimeoutMillis = uiState.ankiSettings.audioDownloadTimeoutMillis,
+                    onSourcesChange = viewModel::updateAnkiAudioSources,
+                    onEnableDefaultAudioSourcesChange = viewModel::setAnkiEnableDefaultAudioSources,
+                    onDownloadTimeoutChange = viewModel::setAnkiAudioDownloadTimeout
                 )
             }
         }

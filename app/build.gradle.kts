@@ -102,6 +102,9 @@ dependencies {
     // AnkiDroid AddContentApi
     implementation(libs.ankidroid.api)
 
+    // HTML parsing for the LanguagePod101 and Jisho audio sources
+    implementation(libs.jsoup)
+
     // Unit testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

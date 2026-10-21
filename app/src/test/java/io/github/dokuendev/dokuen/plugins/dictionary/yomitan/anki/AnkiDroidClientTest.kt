@@ -215,7 +215,7 @@ class AnkiDroidClientTest {
         assertEquals(setOf("dokuen", "vocab"), duplicates[0].tags)
     }
 
-    /** Records the URI grants addImage makes and revokes. */
+    /** Records the URI grants addMedia makes and revokes. */
     private class GrantRecordingContext(base: Context) : ContextWrapper(base) {
         val granted = mutableListOf<Uri>()
         val revoked = mutableListOf<Uri>()
@@ -235,7 +235,7 @@ class AnkiDroidClientTest {
     private fun fakeMediaUri(file: File): Uri = Uri.parse("content://test.fileprovider/anki_media/${file.name}")
 
     @Test
-    fun addImageInsertsTheWrittenFileAndReturnsTheStoredName() {
+    fun addMediaInsertsTheWrittenFileAndReturnsTheStoredName() {
         val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
         val resolver = mock(ContentResolver::class.java)
         val valuesCaptor = argumentCaptor<ContentValues>()
@@ -246,7 +246,7 @@ class AnkiDroidClientTest {
         }
         val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
 
-        val stored = client.addImage("shot.png") { out ->
+        val stored = client.addMedia("shot.png") { out ->
             out.write(byteArrayOf(1, 2, 3))
             true
         }
@@ -263,50 +263,50 @@ class AnkiDroidClientTest {
     }
 
     @Test
-    fun addImageRevokesTheGrantItMade() {
+    fun addMediaRevokesTheGrantItMade() {
         val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
         val resolver = mock(ContentResolver::class.java)
         whenever(resolver.insert(any(), any())).thenReturn(Uri.parse("content://com.ichi2.anki.flashcards/media/x.png"))
         val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
 
-        client.addImage("shot.png") { true }
+        client.addMedia("shot.png") { true }
 
         assertEquals(listOf(Uri.parse("content://test.fileprovider/anki_media/shot.png")), context.granted)
         assertEquals(context.granted, context.revoked)
     }
 
     @Test
-    fun addImageReturnsNullWhenAnkiDroidRefuses() {
+    fun addMediaReturnsNullWhenAnkiDroidRefuses() {
         val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
         val resolver = mock(ContentResolver::class.java)
         whenever(resolver.insert(any(), any())).thenReturn(null)
         val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
 
-        assertNull(client.addImage("shot.png") { true })
+        assertNull(client.addMedia("shot.png") { true })
         assertEquals(context.granted, context.revoked)
         assertFalse(mediaFile(context).exists())
     }
 
     @Test
-    fun addImageInsertsNothingWhenTheWriterFails() {
+    fun addMediaInsertsNothingWhenTheWriterFails() {
         val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
         val resolver = mock(ContentResolver::class.java)
         val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
 
-        assertNull(client.addImage("shot.png") { false })
+        assertNull(client.addMedia("shot.png") { false })
         verify(resolver, never()).insert(any(), any())
         assertTrue(context.granted.isEmpty())
         assertFalse(mediaFile(context).exists())
     }
 
     @Test
-    fun addImageDeletesTheFileAndRevokesTheGrantWhenInsertThrows() {
+    fun addMediaDeletesTheFileAndRevokesTheGrantWhenInsertThrows() {
         val context = GrantRecordingContext(ApplicationProvider.getApplicationContext())
         val resolver = mock(ContentResolver::class.java)
         whenever(resolver.insert(any(), any())).thenThrow(SecurityException("no access"))
         val client = AnkiDroidClient(context, mock(AddContentApi::class.java), resolver, ::fakeMediaUri)
 
-        assertThrows(SecurityException::class.java) { client.addImage("shot.png") { true } }
+        assertThrows(SecurityException::class.java) { client.addMedia("shot.png") { true } }
         assertEquals(1, context.revoked.size)
         assertFalse(mediaFile(context).exists())
     }

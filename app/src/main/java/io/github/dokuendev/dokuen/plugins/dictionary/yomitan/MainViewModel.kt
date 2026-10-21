@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioSource
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateBehavior
@@ -736,6 +737,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAnkiScreenshotQuality(quality: Int) {
         persistAnkiSettings(_uiState.value.ankiSettings.copy(screenshotQuality = quality.coerceIn(0, 100)))
+    }
+
+    /** Applies [transform] to the audio source list as currently stored, like updateAnkiCardFormat. */
+    fun updateAnkiAudioSources(transform: (List<AnkiAudioSource>) -> List<AnkiAudioSource>) {
+        val current = _uiState.value.ankiSettings
+        persistAnkiSettings(current.copy(audioSources = transform(current.audioSources)))
+    }
+
+    fun setAnkiEnableDefaultAudioSources(enabled: Boolean) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(enableDefaultAudioSources = enabled))
+    }
+
+    fun setAnkiAudioDownloadTimeout(millis: Int) {
+        persistAnkiSettings(_uiState.value.ankiSettings.copy(audioDownloadTimeoutMillis = millis.coerceAtLeast(0)))
     }
 
     fun addAnkiCardFormat(format: AnkiCardFormat) {

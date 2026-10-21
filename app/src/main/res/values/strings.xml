@@ -9,6 +9,8 @@
     <string name="installed">Installed</string>
     <string name="kanji">Kanji</string>
     <string name="overwrite">Overwrite</string>
+    <string name="move_up">Move Up</string>
+    <string name="move_down">Move Down</string>
 
     <!-- Guide Card -->
     <string name="guide_title">Getting Started</string>
@@ -28,8 +30,6 @@
     <string name="dictionary_author_version">Author: %1$s • Ver: %2$s</string>
     <string name="author_unknown">Unknown</string>
     <string name="delete_dictionary">Delete Dictionary</string>
-    <string name="content_description_move_up">Move Up</string>
-    <string name="content_description_move_down">Move Down</string>
 
     <!-- Frequency Sorting Dictionary -->
     <string name="section_frequency_sorting_dictionary">Frequency sorting dictionary</string>
@@ -101,14 +101,37 @@
     <string name="anki_screenshot_behavior_crop">Show crop UI</string>
     <string name="anki_screenshot_format_label">Image format</string>
     <string name="anki_screenshot_quality_label">JPEG quality: %1$d</string>
+    <string name="anki_audio_title">Audio</string>
+    <string name="anki_audio_sources_description">When searching for audio, the sources are checked in order until the first valid source is found. This allows for selecting a fallback source if the first choice is not available.</string>
+    <string name="anki_audio_source_label">Source %1$d</string>
+    <string name="anki_audio_source_url_label">URL</string>
+    <string name="anki_audio_source_url_hint">{term}, {reading}, and {language} are replaced with the term, its reading, and the language\'s ISO code.</string>
+    <string name="anki_audio_source_add">Add source</string>
+    <string name="anki_audio_source_remove">Remove source</string>
+    <string name="anki_audio_source_jpod101">JapanesePod101</string>
+    <string name="anki_audio_source_language_pod_101">LanguagePod101</string>
+    <string name="anki_audio_source_jisho">Jisho.org</string>
+    <string name="anki_audio_source_lingua_libre">(Commons) Lingua Libre</string>
+    <string name="anki_audio_source_wiktionary">(Commons) Wiktionary</string>
+    <string name="anki_audio_source_custom">Custom URL</string>
+    <string name="anki_audio_source_custom_json">Custom URL (JSON)</string>
+    <string name="anki_audio_default_sources_label">Enable Default Audio Sources</string>
+    <string name="anki_audio_timeout_label">Idle download timeout (in milliseconds)</string>
+    <string name="anki_audio_timeout_description">The maximum time before an idle download will be cancelled; 0 = no limit.</string>
     <string name="anki_note_added">Note added to Anki.</string>
     <string name="anki_note_updated">Note updated in Anki.</string>
     <string name="error_anki_export_disabled">Anki export is turned off in the plugin settings.</string>
     <string name="anki_note_added_unknown_markers">Note added to Anki, but card format \"%1$s\" uses unknown marker(s): %2$s</string>
     <string name="anki_note_updated_unknown_markers">Note updated in Anki, but card format \"%1$s\" uses unknown marker(s): %2$s</string>
     <string name="anki_note_not_added">Note not added.</string>
-    <string name="anki_note_added_media_failed">Note added to Anki, but AnkiDroid did not accept the image for: %1$s</string>
-    <string name="anki_note_updated_media_failed">Note updated in Anki, but AnkiDroid did not accept the image for: %1$s</string>
+    <string name="anki_note_added_media_failed">Note added to Anki, but AnkiDroid did not accept the media for %1$s.</string>
+    <string name="anki_note_updated_media_failed">Note updated in Anki, but AnkiDroid did not accept the media for %1$s.</string>
+    <string name="anki_note_added_audio_timed_out">Note added to Anki, but {audio} is empty because its download timed out.</string>
+    <string name="anki_note_updated_audio_timed_out">Note updated in Anki, but {audio} is empty because its download timed out.</string>
+    <string name="anki_note_added_audio_offline">Note added to Anki, but {audio} is empty because there is no network connection.</string>
+    <string name="anki_note_updated_audio_offline">Note updated in Anki, but {audio} is empty because there is no network connection.</string>
+    <string name="anki_note_added_audio_unreachable">Note added to Anki, but {audio} is empty because no audio source could be reached.</string>
+    <string name="anki_note_updated_audio_unreachable">Note updated in Anki, but {audio} is empty because no audio source could be reached.</string>
     <string name="anki_note_added_image_denied">Note added successfully, but with empty %1$s field (images require Dokuen Pro).</string>
     <string name="anki_note_updated_image_denied">Note updated successfully, but with empty %1$s field (images require Dokuen Pro).</string>
     <string name="anki_note_added_images_denied">Note added successfully, but with empty %1$s and %2$s fields (images require Dokuen Pro).</string>

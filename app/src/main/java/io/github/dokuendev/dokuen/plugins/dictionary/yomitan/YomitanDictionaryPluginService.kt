@@ -1,8 +1,12 @@
 package io.github.dokuendev.dokuen.plugins.dictionary.yomitan
 
 import android.graphics.Bitmap
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.util.Log
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioDownloader
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioResult
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardIcon
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient
@@ -11,6 +15,8 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldMerger
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiHttp
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiHttpUrlConnection
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaFileNames
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiMediaNeeds
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteData
@@ -49,6 +55,8 @@ import io.github.dokuendev.dokuenreader.plugin.core.InitResultFactory
 import io.github.dokuendev.dokuenreader.plugin.core.PluginCapabilityKeys
 import io.github.dokuendev.dokuenreader.plugin.core.PluginHostConfigKeys
 import io.github.dokuendev.dokuenreader.plugin.core.SdkVersion
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 
 // A format created by the tab-strip editor's "+" starts with deckId/modelId 0 (no deck/model
@@ -85,6 +93,13 @@ private fun parseAnkiAddLinkFormat(link: String?): Int? = ankiAddLinkParams(link
 
 /** The note a tap on a format's link last wrote: a new one, or an existing duplicate it overwrote. */
 private enum class AnkiNoteWrite { ADDED, OVERWRITTEN }
+
+/**
+ * Why a tap's `{audio}` stayed empty, when that is worth telling the user. When every request
+ * fails to connect, the warning is OFFLINE if the device has no internet connection and
+ * UNREACHABLE otherwise.
+ */
+private enum class AnkiAudioWarning { TIMED_OUT, OFFLINE, UNREACHABLE }
 
 /**
  * What a tap on a format's link would do, given the duplicates found for it, shown by the link's
@@ -187,6 +202,47 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         set(value) {
             ankiDroidClientInstance = value
         }
+
+    private var ankiHttpInstance: AnkiHttp? = null
+
+    /**
+     * The HTTP client that `{audio}` downloads with. It is created on first use, and tests replace
+     * it with a fake.
+     */
+    internal var ankiHttp: AnkiHttp
+        get() = ankiHttpInstance ?: AnkiHttpUrlConnection(ankiUserAgent()).also { ankiHttpInstance = it }
+        set(value) {
+            ankiHttpInstance = value
+        }
+
+    /**
+     * Whether the device has a network connection that can reach the internet. This tells an
+     * offline device apart from audio sources that cannot be reached (a mistyped host or a local
+     * audio server that is not running). Tests replace it.
+     */
+    internal var hasInternetConnection: () -> Boolean = {
+        try {
+            val manager = getSystemService(ConnectivityManager::class.java)
+            val capabilities = manager?.getNetworkCapabilities(manager.activeNetwork)
+            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        } catch (e: Exception) {
+            // The state is unknown, so do not claim that the device is offline.
+            true
+        }
+    }
+
+    /**
+     * The User-Agent the audio sources see. It gives the plugin's name, version, and project page,
+     * in the form that Wikimedia's User-Agent policy asks for.
+     */
+    private fun ankiUserAgent(): String {
+        val version = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            null
+        } ?: "unknown"
+        return "YomitanForDokuen/$version (https://github.com/dokuen-dev/dokuen-plugin-yomitan)"
+    }
 
     /**
      * Reloaded from the settings store at the start of every lookup: the plugin session is
@@ -1693,13 +1749,14 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         // Images are requested only now that it is known what the write keeps, and the fields
         // above (including the duplicate key) were rendered without them. How images are
         // obtained and encoded follows the live settings, not the link's snapshot.
-        val media = acquireAnkiMedia(actionContext, liveSettings, format, fieldNames, existing)
+        val media = acquireAnkiMedia(actionContext, liveSettings, format, fieldNames, existing, noteData)
             ?: return CustomActionResult.SuccessMessage(getString(R.string.anki_note_not_added))
         if (!media.isEmpty) {
             noteData = noteData.copy(
                 screenshotFileName = media.screenshotFileName,
                 clipboardImageFileName = media.clipboardImageFileName,
-                clipboardText = media.clipboardText
+                clipboardText = media.clipboardText,
+                audioFileName = media.audioFileName
             )
         }
         val finalData = noteData
@@ -1725,7 +1782,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             }
             return finishAnkiWrite(
                 ref, linkContext, formatIndex, added = false, statusAfterWrite, fieldNames, unknownMarkers,
-                media.failedMarkers, media.deniedMarkers
+                media.failedMarkers, media.deniedMarkers, media.audioWarning
             )
         }
 
@@ -1733,7 +1790,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_add_failed))
         return finishAnkiWrite(
             ref, linkContext, formatIndex, added = true, statusAfterWrite, fieldNames, unknownMarkers,
-            media.failedMarkers, media.deniedMarkers
+            media.failedMarkers, media.deniedMarkers, media.audioWarning
         )
     }
 
@@ -1777,19 +1834,23 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
     ): Boolean = canRequestSentenceFurigana(data) && AnkiSentenceFurigana.isUsed(fieldNames, fields)
 
     /**
-     * The images a note write got: their AnkiDroid file names, the markers whose image could not
-     * be stored, the markers left empty because the host denied images (the user has no Dokuen
-     * Pro), and the clipboard text.
+     * The media a note write got. It holds the AnkiDroid file names of its images and audio, the
+     * markers whose file could not be stored, the markers left empty because the host denied images
+     * (the user has no Dokuen Pro), the clipboard text, and the reason `{audio}` stayed empty, if
+     * the user should be told.
      */
     private data class AnkiMedia(
         val screenshotFileName: String? = null,
         val clipboardImageFileName: String? = null,
         val failedMarkers: List<String> = emptyList(),
         val deniedMarkers: List<String> = emptyList(),
-        val clipboardText: String? = null
+        val clipboardText: String? = null,
+        val audioFileName: String? = null,
+        val audioWarning: AnkiAudioWarning? = null
     ) {
         val isEmpty: Boolean
-            get() = screenshotFileName == null && clipboardImageFileName == null && clipboardText == null
+            get() = screenshotFileName == null && clipboardImageFileName == null && clipboardText == null &&
+                    audioFileName == null
     }
 
     /**
@@ -1798,14 +1859,16 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * case nothing further is requested and nothing may be written. Once the host denies one
      * image it would deny the rest, so the remaining images are not requested and count as
      * denied too. Then requests the clipboard text if the write uses it; the host does not gate
-     * text on Dokuen Pro, so this happens even when images were denied.
+     * text on Dokuen Pro, so this happens even when images were denied. Last, in the original's
+     * order, downloads the term's audio if the write uses `{audio}` (see downloadAnkiAudio).
      */
     private suspend fun acquireAnkiMedia(
         actionContext: CustomActionContext,
         settings: AnkiSettings,
         format: AnkiCardFormat,
         fieldNames: List<String>,
-        existing: AnkiNoteInfo?
+        existing: AnkiNoteInfo?,
+        noteData: AnkiNoteData
     ): AnkiMedia? {
         // One timestamp per note, as the original names all of a note's media at once.
         val timestamp = System.currentTimeMillis()
@@ -1845,7 +1908,69 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             val text = actionContext.requestClipboardText()?.replace("\r\n", "\n")?.replace('\r', '\n')
             media = media.copy(clipboardText = text)
         }
-        return media.copy(failedMarkers = failed, deniedMarkers = denied)
+        var audioWarning: AnkiAudioWarning? = null
+        // As in the original (_injectAnkiNoteAudio), only a term whose expression or reading is not
+        // empty gets audio.
+        if (noteData.type == AnkiEntryType.TERM && (noteData.expression.isNotEmpty() || noteData.reading.isNotEmpty()) &&
+            AnkiMediaNeeds.isNeeded(AnkiMediaNeeds.AUDIO, fieldNames, format.fields, existing)
+        ) {
+            when (val result = downloadAnkiAudio(settings, noteData)) {
+                is AnkiAudioResult.Audio -> {
+                    val fileName = storeAnkiAudio(result)
+                    if (fileName == null) {
+                        failed += AnkiMediaNeeds.AUDIO
+                    } else {
+                        media = media.copy(audioFileName = fileName)
+                    }
+                }
+
+                AnkiAudioResult.TimedOut -> audioWarning = AnkiAudioWarning.TIMED_OUT
+                AnkiAudioResult.Offline -> audioWarning =
+                    if (hasInternetConnection()) AnkiAudioWarning.UNREACHABLE else AnkiAudioWarning.OFFLINE
+
+                AnkiAudioResult.NoAudio -> Unit
+            }
+        }
+        return media.copy(failedMarkers = failed, deniedMarkers = denied, audioWarning = audioWarning)
+    }
+
+    /**
+     * Downloads the note's term audio from the sources in [settings] (the live settings, like the
+     * image settings), in the session's language, on the IO dispatcher.
+     */
+    private suspend fun downloadAnkiAudio(settings: AnkiSettings, noteData: AnkiNoteData): AnkiAudioResult =
+        withContext(Dispatchers.IO) {
+            AnkiAudioDownloader(ankiHttp).downloadTermAudio(
+                sources = settings.audioSources,
+                term = noteData.expression,
+                reading = noteData.reading,
+                timeoutMillis = settings.audioDownloadTimeoutMillis.takeIf { it > 0 },
+                language = sessionLanguage,
+                enableDefaultAudioSources = settings.enableDefaultAudioSources
+            )
+        }
+
+    /**
+     * Stores downloaded audio in AnkiDroid under the original's name, returning the stored name or
+     * null. Unlike the images, the name keeps the original's `yomitan_` prefix: the audio comes
+     * from the same sources as on desktop.
+     */
+    private fun storeAnkiAudio(audio: AnkiAudioResult.Audio): String? {
+        // As _injectAnkiNoteAudio does, `]` is removed so the name cannot end a `[sound:...]` tag early.
+        val fileName = AnkiMediaFileNames.hashed(
+            "yomitan_audio",
+            audio.data,
+            AnkiMediaFileNames.audioExtension(audio.contentType)
+        ).replace("]", "")
+        return try {
+            ankiDroidClient.addMedia(fileName) { out ->
+                out.write(audio.data)
+                true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not store audio in AnkiDroid", e)
+            null
+        }
     }
 
     /**
@@ -1872,7 +1997,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         val prefix = if (isScreenshot) "dokuen_screenshot" else "dokuen_clipboard_image"
         // Encoding happens inside the try too, so any failure only loses this image, not the note.
         return try {
-            ankiDroidClient.addImage(AnkiMediaFileNames.generate(prefix, extension, timestamp)) { out ->
+            ankiDroidClient.addMedia(AnkiMediaFileNames.generate(prefix, extension, timestamp)) { out ->
                 bitmap.compress(compressFormat, quality, out)
             }
         } catch (e: Exception) {
@@ -1885,11 +2010,13 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
      * Result of a successful write. The tapped link is relabeled ("Added" or "Overwritten") and
      * colored by [statusAfterWrite], every other link of the entry is colored by a fresh
      * duplicate check (see checkOtherAnkiLinks), and the lookup's entries are returned to show
-     * them, along with a warning for unknown markers, images AnkiDroid did not accept, or images
-     * the host denied. If the lookup is no longer tracked, the note was still written, so the
-     * warning or a plain confirmation is returned. A host that would drop an UpdateResult's
-     * message (see hostShowsUpdateMessages) gets the warning on its own instead, and the new
-     * labels and colors show the next time a tap refreshes the lookup.
+     * them, along with a warning about unknown markers, media files AnkiDroid did not accept, the
+     * reason `{audio}` stayed empty, or images the host denied. Only the first of these that
+     * applies is shown, in that order, so the message is a single sentence. If the lookup is no
+     * longer tracked, the note was still written, so the warning or a plain confirmation is
+     * returned. A host that would drop an UpdateResult's message (see hostShowsUpdateMessages) gets
+     * the warning on its own instead, and the new labels and colors show the next time a tap
+     * refreshes the lookup.
      */
     private suspend fun finishAnkiWrite(
         ref: AnkiLinkRef,
@@ -1900,7 +2027,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         fieldNames: List<String>,
         unknownMarkers: List<String>,
         failedMediaMarkers: List<String>,
-        deniedImageMarkers: List<String>
+        deniedImageMarkers: List<String>,
+        audioWarning: AnkiAudioWarning?
     ): CustomActionResult {
         val format = context.formats[formatIndex]
         val write = if (added) AnkiNoteWrite.ADDED else AnkiNoteWrite.OVERWRITTEN
@@ -1914,44 +2042,53 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             it.statuses[formatIndex] = statusAfterWrite
             it.statuses.putAll(otherStatuses)
         }
-        val warnings = buildList {
-            if (unknownMarkers.isNotEmpty()) {
-                add(
-                    getString(
-                        if (added) R.string.anki_note_added_unknown_markers else R.string.anki_note_updated_unknown_markers,
-                        format.name,
-                        unknownMarkers.joinToString(", ") { "{$it}" }
-                    )
-                )
-            }
-            if (failedMediaMarkers.isNotEmpty()) {
-                add(
-                    getString(
-                        if (added) R.string.anki_note_added_media_failed else R.string.anki_note_updated_media_failed,
-                        failedMediaMarkers.joinToString(", ") { "{$it}" }
-                    )
-                )
-            }
-            if (deniedImageMarkers.isNotEmpty()) {
+        // Each message is a whole sentence about the write, so only the most important one is
+        // shown. A broken card format comes first, and the images left out for want of Dokuen Pro
+        // come last, since every add without it reports them.
+        val warning = when {
+            unknownMarkers.isNotEmpty() -> getString(
+                if (added) R.string.anki_note_added_unknown_markers else R.string.anki_note_updated_unknown_markers,
+                format.name,
+                unknownMarkers.joinToString(", ") { "{$it}" }
+            )
+
+            failedMediaMarkers.isNotEmpty() -> getString(
+                if (added) R.string.anki_note_added_media_failed else R.string.anki_note_updated_media_failed,
+                failedMediaMarkers.joinToString(", ") { "{$it}" }
+            )
+
+            audioWarning != null -> getString(
+                when (audioWarning) {
+                    AnkiAudioWarning.TIMED_OUT ->
+                        if (added) R.string.anki_note_added_audio_timed_out else R.string.anki_note_updated_audio_timed_out
+
+                    AnkiAudioWarning.OFFLINE ->
+                        if (added) R.string.anki_note_added_audio_offline else R.string.anki_note_updated_audio_offline
+
+                    AnkiAudioWarning.UNREACHABLE ->
+                        if (added) R.string.anki_note_added_audio_unreachable else R.string.anki_note_updated_audio_unreachable
+                }
+            )
+
+            deniedImageMarkers.isNotEmpty() -> {
                 val markers = deniedImageMarkers.map { "{$it}" }
                 // There are only two image markers.
-                add(
-                    if (markers.size == 1) {
-                        getString(
-                            if (added) R.string.anki_note_added_image_denied else R.string.anki_note_updated_image_denied,
-                            markers[0]
-                        )
-                    } else {
-                        getString(
-                            if (added) R.string.anki_note_added_images_denied else R.string.anki_note_updated_images_denied,
-                            markers[0],
-                            markers[1]
-                        )
-                    }
-                )
+                if (markers.size == 1) {
+                    getString(
+                        if (added) R.string.anki_note_added_image_denied else R.string.anki_note_updated_image_denied,
+                        markers[0]
+                    )
+                } else {
+                    getString(
+                        if (added) R.string.anki_note_added_images_denied else R.string.anki_note_updated_images_denied,
+                        markers[0],
+                        markers[1]
+                    )
+                }
             }
+
+            else -> null
         }
-        val warning = warnings.takeIf { it.isNotEmpty() }?.joinToString(" ")
         if (entries != null && (warning == null || hostShowsUpdateMessages)) {
             return CustomActionResult.UpdateResult(DictionaryResult(entries = entries), warning)
         }

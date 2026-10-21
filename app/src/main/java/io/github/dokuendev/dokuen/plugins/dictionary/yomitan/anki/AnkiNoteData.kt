@@ -95,6 +95,8 @@ data class AnkiNoteData(
     val screenshotFileName: String? = null,
     /** The AnkiDroid media file name of the `{clipboard-image}` image, set per tap. */
     val clipboardImageFileName: String? = null,
+    /** The AnkiDroid media file name of the `{audio}` file, set per tap. */
+    val audioFileName: String? = null,
     /** The clipboard's text for `{clipboard-text}`, set per tap. */
     val clipboardText: String? = null
 )

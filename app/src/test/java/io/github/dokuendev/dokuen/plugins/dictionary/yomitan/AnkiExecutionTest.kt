@@ -4,6 +4,8 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioSource
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioSourceType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDroidClient
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateBehavior
@@ -11,11 +13,13 @@ import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiDuplicateS
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiEntryType
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiField
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiFieldOverwriteMode
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiHttp
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiNoteInfo
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotBehavior
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiScreenshotFormat
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettings
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiSettingsStore
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.FakeAnkiHttp
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.DictionaryEntity
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.KanjiEntity
@@ -36,6 +40,7 @@ import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -166,11 +171,15 @@ class AnkiExecutionTest {
         settings: AnkiSettings,
         client: AnkiDroidClient,
         language: String? = null,
-        hostSdkVersion: String? = "0.8.0"
+        hostSdkVersion: String? = "0.8.0",
+        http: AnkiHttp = FakeAnkiHttp(),
+        online: Boolean = true
     ): YomitanDictionaryPluginService {
         AnkiSettingsStore.save(app, settings)
         val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
         service.ankiDroidClient = client
+        service.ankiHttp = http
+        service.hasInternetConnection = { online }
         service.onInitialize(Bundle().apply {
             putString(PluginHostConfigKeys.UI_THEME, "light")
             language?.let { putString(PluginHostConfigKeys.LANGUAGE, it) }
@@ -1264,7 +1273,7 @@ class AnkiExecutionTest {
 
     @Test
     fun readingsAreRequestedBeforeImagesAndClipboardText() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) }
+        val client = mockClient().also { stubAddMedia(it) }
         val format = imageFormat(picture = "{screenshot}{clipboard-text}{sentence-furigana}")
         val service = newService(settings(format), client)
         val context = FakeActionContext(readings = { sentenceReadings() }, clipboardText = "copied")
@@ -1492,10 +1501,13 @@ class AnkiExecutionTest {
 
     private fun image() = ImageRequestResult.Image(Bitmap.createBitmap(4, 3, Bitmap.Config.ARGB_8888))
 
-    /** Stubs addImage to run its writer and store under [storedAs]; returns what each call wrote. */
-    private fun stubAddImage(client: AnkiDroidClient, storedAs: (String) -> String? = { it }): List<ByteArray> {
+    /**
+     * Stubs addMedia to run its writer and store the file under [storedAs], and returns what each
+     * call wrote.
+     */
+    private fun stubAddMedia(client: AnkiDroidClient, storedAs: (String) -> String? = { it }): List<ByteArray> {
         val written = mutableListOf<ByteArray>()
-        whenever(client.addImage(any(), any())).thenAnswer {
+        whenever(client.addMedia(any(), any())).thenAnswer {
             @Suppress("UNCHECKED_CAST")
             val write = it.arguments[1] as (OutputStream) -> Boolean
             val out = ByteArrayOutputStream()
@@ -1508,7 +1520,7 @@ class AnkiExecutionTest {
 
     @Test
     fun screenshotIsRequestedAndWrittenIntoTheNote() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) }
+        val client = mockClient().also { stubAddMedia(it) }
         val service = newService(settings(imageFormat()), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
         val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image()))
@@ -1517,7 +1529,7 @@ class AnkiExecutionTest {
 
         assertEquals(listOf(ImageRequestSource.SCREENSHOT to false), context.requests)
         val nameCaptor = argumentCaptor<String>()
-        verify(client).addImage(nameCaptor.capture(), any())
+        verify(client).addMedia(nameCaptor.capture(), any())
         assertTrue(nameCaptor.firstValue.matches(Regex("dokuen_screenshot_\\d{4}(-\\d{2}){5}-\\d{3}\\.png")))
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
@@ -1526,7 +1538,7 @@ class AnkiExecutionTest {
 
     @Test
     fun cropSettingMakesTheRequestInteractiveAndJpegIsUsed() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) }
+        val client = mockClient().also { stubAddMedia(it) }
         val service = newService(
             settings(imageFormat()).copy(
                 screenshotBehavior = AnkiScreenshotBehavior.CROP,
@@ -1541,14 +1553,14 @@ class AnkiExecutionTest {
 
         assertEquals(listOf(ImageRequestSource.SCREENSHOT to true), context.requests)
         val nameCaptor = argumentCaptor<String>()
-        verify(client).addImage(nameCaptor.capture(), any())
+        verify(client).addMedia(nameCaptor.capture(), any())
         assertTrue(nameCaptor.firstValue.endsWith(".jpeg"))
     }
 
     @Test
     fun clipboardImageIsPngWhateverTheScreenshotFormat() = runBlocking {
         val client = mockClient()
-        val written = stubAddImage(client)
+        val written = stubAddMedia(client)
         val service = newService(
             settings(imageFormat(picture = "{screenshot}{clipboard-image}"))
                 .copy(screenshotFormat = AnkiScreenshotFormat.JPEG),
@@ -1562,7 +1574,7 @@ class AnkiExecutionTest {
         service.executeAction(payload, context)
 
         val nameCaptor = argumentCaptor<String>()
-        verify(client, times(2)).addImage(nameCaptor.capture(), any())
+        verify(client, times(2)).addMedia(nameCaptor.capture(), any())
         assertTrue(nameCaptor.firstValue.endsWith(".jpeg"))
         assertTrue(nameCaptor.secondValue, nameCaptor.secondValue.matches(Regex("dokuen_clipboard_image_.*\\.png")))
         // The PNG signature's first bytes.
@@ -1572,7 +1584,7 @@ class AnkiExecutionTest {
     @Test
     fun outOfRangeJpegQualityStillStoresTheImage() = runBlocking {
         val client = mockClient()
-        val written = stubAddImage(client)
+        val written = stubAddMedia(client)
         val service = newService(
             settings(imageFormat()).copy(screenshotFormat = AnkiScreenshotFormat.JPEG, screenshotQuality = 150),
             client
@@ -1590,7 +1602,7 @@ class AnkiExecutionTest {
     @Test
     fun anImageThatCannotBeStoredStillWritesTheNoteAndSaysSo() = runBlocking {
         val client = mockClient()
-        whenever(client.addImage(any(), any())).thenThrow(IllegalStateException("cannot store"))
+        whenever(client.addMedia(any(), any())).thenThrow(IllegalStateException("cannot store"))
         val service = newService(settings(imageFormat()), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
@@ -1616,7 +1628,7 @@ class AnkiExecutionTest {
 
     @Test
     fun screenshotThenClipboardAreBothRequested() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) }
+        val client = mockClient().also { stubAddMedia(it) }
         val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
         val context = FakeActionContext(
@@ -1630,7 +1642,7 @@ class AnkiExecutionTest {
             context.requests
         )
         val nameCaptor = argumentCaptor<String>()
-        verify(client, times(2)).addImage(nameCaptor.capture(), any())
+        verify(client, times(2)).addMedia(nameCaptor.capture(), any())
         assertTrue(nameCaptor.secondValue.startsWith("dokuen_clipboard_image_"))
     }
 
@@ -1645,7 +1657,7 @@ class AnkiExecutionTest {
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
         assertEquals("", fieldsCaptor.firstValue[1])
-        verify(client, never()).addImage(any(), any())
+        verify(client, never()).addMedia(any(), any())
     }
 
     @Test
@@ -1694,7 +1706,7 @@ class AnkiExecutionTest {
 
     @Test
     fun overwriteMergesTheImageIntoTheExistingNote() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) { "stored.png" } }
+        val client = mockClient().also { stubAddMedia(it) { "stored.png" } }
         stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
         val service = newService(settings(imageFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
@@ -1708,7 +1720,7 @@ class AnkiExecutionTest {
 
     @Test
     fun screenshotInTheFirstFieldDoesNotChangeTheDuplicateKey() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) }
+        val client = mockClient().also { stubAddMedia(it) }
         val firstFieldImage = format(
             fields = mapOf("Front" to AnkiField("{expression}{screenshot}"), "Back" to AnkiField("{reading}"))
         )
@@ -1725,7 +1737,7 @@ class AnkiExecutionTest {
 
     @Test
     fun failedMediaInsertStillWritesTheNoteAndSaysSo() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) { null } }
+        val client = mockClient().also { stubAddMedia(it) { null } }
         val service = newService(settings(imageFormat()), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
 
@@ -1740,7 +1752,7 @@ class AnkiExecutionTest {
 
     @Test
     fun deniedWritesTheNoteWithoutImagesAndSaysWhy() = runBlocking {
-        val client = mockClient().also { stubAddImage(it) }
+        val client = mockClient().also { stubAddMedia(it) }
         val service = newService(settings(imageFormat(picture = "{screenshot}{clipboard-image}")), client)
         val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
         val context = FakeActionContext(
@@ -1750,7 +1762,7 @@ class AnkiExecutionTest {
         val result = service.executeAction(payload, context)
 
         assertEquals(listOf(ImageRequestSource.SCREENSHOT to false), context.requests)
-        verify(client, never()).addImage(any(), any())
+        verify(client, never()).addMedia(any(), any())
         val fieldsCaptor = argumentCaptor<List<String>>()
         verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
         assertEquals("", fieldsCaptor.firstValue[1])
@@ -1859,5 +1871,298 @@ class AnkiExecutionTest {
         service.executeAction(payload, context)
 
         assertEquals(0, context.textRequests)
+    }
+
+    private val taberuJpod101 = "https://assets.languagepod101.com/dictionary/japanese/audiomp3.php?" +
+            "kanji=%E9%A3%9F%E3%81%B9%E3%82%8B&kana=%E3%81%9F%E3%81%B9%E3%82%8B"
+
+    // SHA-1 of "abc", the audio the fake JapanesePod101 serves.
+    private val taberuAudioName = "yomitan_audio_a9993e364706816aba3e25717850c26c9cd0d89d.mp3"
+
+    private fun audioFormat(
+        back: String = "{audio}",
+        mode: AnkiFieldOverwriteMode = AnkiFieldOverwriteMode.COALESCE
+    ) = format(
+        fields = mapOf(
+            "Front" to AnkiField(value = "{expression}"),
+            "Back" to AnkiField(value = back, overwriteMode = mode)
+        )
+    )
+
+    private fun jpod101Audio() =
+        FakeAnkiHttp(taberuJpod101 to FakeAnkiHttp.Reply.audio("abc".toByteArray(), "audio/mpeg"))
+
+    @Test
+    fun audioIsDownloadedStoredAndWrittenIntoTheNote() = runBlocking {
+        val client = mockClient()
+        val written = stubAddMedia(client) { it.replace(".mp3", "_123.mp3") }
+        val http = jpod101Audio()
+        val service = newService(settings(audioFormat()), client, http = http)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(payload)
+
+        val nameCaptor = argumentCaptor<String>()
+        verify(client).addMedia(nameCaptor.capture(), any())
+        assertEquals(taberuAudioName, nameCaptor.firstValue)
+        assertEquals("abc", String(written.single()))
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("[sound:${taberuAudioName.replace(".mp3", "_123.mp3")}]", fieldsCaptor.firstValue[1])
+        // A timeout of 0 means none.
+        assertNull(http.requests.single().timeoutMillis)
+        assertNull((result as CustomActionResult.UpdateResult).message)
+    }
+
+    @Test
+    fun audioDownloadUsesTheTimeoutSetting() = runBlocking {
+        val client = mockClient().also { stubAddMedia(it) }
+        val http = jpod101Audio()
+        val service = newService(settings(audioFormat()).copy(audioDownloadTimeoutMillis = 1500), client, http = http)
+
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        assertEquals(1500, http.requests.single().timeoutMillis)
+    }
+
+    @Test
+    fun overwriteMergesTheAudioIntoTheExistingNote() = runBlocking {
+        val client = mockClient().also { stubAddMedia(it) }
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val service = newService(
+            settings(audioFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE),
+            client,
+            http = jpod101Audio()
+        )
+
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).updateNoteFields(eq(55L), fieldsCaptor.capture())
+        assertEquals("[sound:$taberuAudioName]", fieldsCaptor.firstValue[1])
+    }
+
+    @Test
+    fun aKanjiNoteDownloadsNoAudio() = runBlocking {
+        addKanji("瓶")
+        val client = mockClient()
+        val kanji = kanjiFormat().copy(
+            fields = mapOf("Front" to AnkiField(value = "{character}"), "Back" to AnkiField(value = "{audio}"))
+        )
+        val http = FakeAnkiHttp()
+        val service = newService(settings(kanji), client, http = http)
+        val entry = scan(service, "冷たい水入りの瓶。", "瓶").entries.single()
+
+        service.executeAction(addPayloads(entry).single())
+
+        assertTrue(http.requests.isEmpty())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("", fieldsCaptor.firstValue[1])
+    }
+
+    @Test
+    fun overwritingASkippedAudioFieldDownloadsNothing() = runBlocking<Unit> {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val http = jpod101Audio()
+        val service = newService(
+            settings(audioFormat(mode = AnkiFieldOverwriteMode.SKIP), behavior = AnkiDuplicateBehavior.OVERWRITE),
+            client,
+            http = http
+        )
+
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        assertTrue(http.requests.isEmpty())
+        verify(client).updateNoteFields(eq(55L), any())
+    }
+
+    @Test
+    fun aFilledFillIfEmptyAudioFieldDownloadsNothing() = runBlocking {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "[sound:old.mp3]")))
+        val http = jpod101Audio()
+        val service =
+            newService(settings(audioFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE), client, http = http)
+
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        assertTrue(http.requests.isEmpty())
+    }
+
+    @Test
+    fun noAudioLeavesTheFieldEmptyWithoutAWarning() = runBlocking {
+        val client = mockClient()
+        val http = FakeAnkiHttp(taberuJpod101 to FakeAnkiHttp.Reply.status(404))
+        val service = newService(settings(audioFormat()).copy(enableDefaultAudioSources = false), client, http = http)
+
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("", fieldsCaptor.firstValue[1])
+        assertNull((result as CustomActionResult.UpdateResult).message)
+    }
+
+    @Test
+    fun aTimedOutDownloadStillWritesTheNoteAndSaysSo() = runBlocking {
+        val client = mockClient()
+        val http = FakeAnkiHttp(taberuJpod101 to FakeAnkiHttp.Reply.timeout())
+        val service = newService(settings(audioFormat()).copy(audioDownloadTimeoutMillis = 100), client, http = http)
+
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        verify(client).addNote(any(), any(), any(), any())
+        assertEquals("Note added to Anki, but {audio} is empty because its download timed out.", warning(result))
+    }
+
+    @Test
+    fun beingOfflineStillWritesTheNoteAndSaysSo() = runBlocking {
+        val client = mockClient()
+        val service = newService(settings(audioFormat()), client, http = FakeAnkiHttp(), online = false)
+
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        verify(client).addNote(any(), any(), any(), any())
+        assertEquals(
+            "Note added to Anki, but {audio} is empty because there is no network connection.",
+            warning(result)
+        )
+    }
+
+    @Test
+    fun unreachableSourcesWhileOnlineDoNotClaimTheDeviceIsOffline() = runBlocking {
+        // This happens with a mistyped custom host or a local audio server that is not running.
+        val client = mockClient()
+        val unreachable = AnkiAudioSource(AnkiAudioSourceType.CUSTOM, "http://localhost:5050/{term}")
+        val service = newService(
+            settings(audioFormat()).copy(audioSources = listOf(unreachable), enableDefaultAudioSources = false),
+            client,
+            http = FakeAnkiHttp(),
+            online = true
+        )
+
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        verify(client).addNote(any(), any(), any(), any())
+        assertEquals(
+            "Note added to Anki, but {audio} is empty because no audio source could be reached.",
+            warning(result)
+        )
+    }
+
+    @Test
+    fun offlineOnOverwriteSaysTheNoteWasUpdated() = runBlocking {
+        val client = mockClient()
+        stubDuplicates(client, listOf(duplicate(55L, "食べる", "")))
+        val service = newService(
+            settings(audioFormat(), behavior = AnkiDuplicateBehavior.OVERWRITE),
+            client,
+            http = FakeAnkiHttp(),
+            online = false
+        )
+
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        assertEquals(
+            "Note updated in Anki, but {audio} is empty because there is no network connection.",
+            warning(result)
+        )
+    }
+
+    @Test
+    fun theAudioMessageOutranksTheImageMessage() = runBlocking {
+        val client = mockClient()
+        val service =
+            newService(settings(audioFormat("{screenshot}{audio}")), client, http = FakeAnkiHttp(), online = false)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(
+            payload,
+            FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Denied))
+        )
+
+        assertEquals(
+            "Note added to Anki, but {audio} is empty because there is no network connection.",
+            warning(result)
+        )
+    }
+
+    @Test
+    fun aRejectedMediaFileOutranksTheAudioMessage() = runBlocking {
+        val client = mockClient().also { stubAddMedia(it) { null } }
+        val service =
+            newService(settings(audioFormat("{screenshot}{audio}")), client, http = FakeAnkiHttp(), online = false)
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(payload, FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to image())))
+
+        assertEquals(
+            "Note added to Anki, but AnkiDroid did not accept the media for {screenshot}.",
+            warning(result)
+        )
+    }
+
+    @Test
+    fun unknownMarkersOutrankEveryOtherMessage() = runBlocking {
+        val client = mockClient()
+        val service = newService(
+            settings(audioFormat("{screenshot}{audio}{nope}")),
+            client,
+            http = FakeAnkiHttp(),
+            online = false
+        )
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+
+        val result = service.executeAction(
+            payload,
+            FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Denied))
+        )
+
+        assertEquals("Note added to Anki, but card format \"Vocab\" uses unknown marker(s): {nope}", warning(result))
+    }
+
+    @Test
+    fun audioAnkiDroidDoesNotAcceptStillWritesTheNoteAndSaysSo() = runBlocking {
+        val client = mockClient().also { stubAddMedia(it) { null } }
+        val service = newService(settings(audioFormat()), client, http = jpod101Audio())
+
+        val result = service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("", fieldsCaptor.firstValue[1])
+        val message = warning(result)
+        assertTrue(message, message.contains("{audio}"))
+    }
+
+    @Test
+    fun audioInTheFirstFieldDoesNotChangeTheDuplicateKey() = runBlocking {
+        val client = mockClient().also { stubAddMedia(it) }
+        val firstFieldAudio = format(
+            fields = mapOf("Front" to AnkiField("{expression}{audio}"), "Back" to AnkiField("{reading}"))
+        )
+        val service = newService(settings(firstFieldAudio), client, http = jpod101Audio())
+
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single())
+
+        verify(client).findDuplicateNotes(any(), any(), eq("食べる"), any<AnkiDuplicateScope>(), any())
+        val fieldsCaptor = argumentCaptor<List<String>>()
+        verify(client).addNote(any(), any(), fieldsCaptor.capture(), any())
+        assertEquals("食べる[sound:$taberuAudioName]", fieldsCaptor.firstValue[0])
+    }
+
+    @Test
+    fun aCancelledScreenshotDownloadsNoAudio() = runBlocking<Unit> {
+        val client = mockClient()
+        val http = jpod101Audio()
+        val service = newService(settings(audioFormat(back = "{screenshot}{audio}")), client, http = http)
+        val context = FakeActionContext(mapOf(ImageRequestSource.SCREENSHOT to ImageRequestResult.Cancelled))
+
+        service.executeAction(addPayloads(lookup(service, "食べる").entries[0]).single(), context)
+
+        assertTrue(http.requests.isEmpty())
+        verify(client, never()).addNote(any(), any(), any(), any())
     }
 }

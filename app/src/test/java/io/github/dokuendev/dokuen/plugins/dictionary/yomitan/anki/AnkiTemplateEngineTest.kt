@@ -396,8 +396,8 @@ class AnkiTemplateEngineTest {
 
     @Test
     fun testUnsupportedMarkerResolvesToEmptyStringNotError() {
-        val result = AnkiTemplateEngine.renderField("front:{expression} audio:{audio}", termData)
-        assertEquals("front:食べる audio:", result.text)
+        val result = AnkiTemplateEngine.renderField("front:{expression} url:{url}", termData)
+        assertEquals("front:食べる url:", result.text)
         assertTrue(result.unknownMarkers.isEmpty())
     }
 
@@ -494,6 +494,20 @@ class AnkiTemplateEngineTest {
 
         assertEquals("[]", result.text)
         assertTrue(result.unknownMarkers.isEmpty())
+    }
+
+    @Test
+    fun audioMarkerRendersTheOriginalsSoundTag() {
+        val data = AnkiNoteData(type = AnkiEntryType.TERM, audioFileName = "yomitan_audio_abc_123.mp3")
+
+        assertEquals("[sound:yomitan_audio_abc_123.mp3]", AnkiTemplateEngine.renderField("{audio}", data).text)
+        // The original's partial is `[sound:{{getMedia "audio"}}]`: getMedia escapes the name and
+        // the double-brace output escapes it again.
+        assertEquals(
+            "[sound:a&amp;amp;b.mp3]",
+            AnkiTemplateEngine.renderField("{audio}", data.copy(audioFileName = "a&b.mp3")).text
+        )
+        assertEquals("", AnkiTemplateEngine.renderField("{audio}", data.copy(audioFileName = null)).text)
     }
 
     @Test

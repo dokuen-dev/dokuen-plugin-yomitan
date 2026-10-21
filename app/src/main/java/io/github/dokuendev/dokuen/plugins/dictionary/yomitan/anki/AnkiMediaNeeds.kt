@@ -8,6 +8,7 @@ object AnkiMediaNeeds {
     const val SCREENSHOT = "screenshot"
     const val CLIPBOARD_IMAGE = "clipboard-image"
     const val CLIPBOARD_TEXT = "clipboard-text"
+    const val AUDIO = "audio"
 
     /** The image markers, in the order their images are requested. */
     val IMAGE_MARKERS = listOf(SCREENSHOT, CLIPBOARD_IMAGE)

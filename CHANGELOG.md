@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- The `{audio}` Anki field marker now adds the term's pronunciation to the note, downloaded from
+  JapanesePod101, LanguagePod101, Jisho.org, Lingua Libre, Wiktionary, or a custom URL, as in
+  desktop Yomitan.
+- A new "Audio" settings card for choosing the sources and their order, whether the default sources
+  are also tried, and the download timeout.
+
+### Changed
+
+- When several things go wrong with an Anki export at once, the message after the save now
+  describes only the most important one instead of running several messages together.
+
 ## [1.3.1]
 
 ### Changed

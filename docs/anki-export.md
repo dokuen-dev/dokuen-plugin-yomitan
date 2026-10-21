@@ -31,6 +31,12 @@ All Anki-specific code lives under the `anki` subpackage (sibling to `db`, `pars
 | `AnkiDictionaryStyles.kt` | Scopes a dictionary's `styles.css` for the `<style>` elements the glossary markers embed, like the original's `addScopeToCssLegacy`. |
 | `AnkiSentenceExtractor.kt` | Port of the original's sentence extraction: narrows the host's context text (a whole OCR block) to the sentence around the matched word. |
 | `AnkiFieldMerger.kt` | Combines an existing note field with a new value per the field's overwrite mode. |
+| `AnkiAudioSource.kt` | The audio source types `{audio}` can use and one configured source. |
+| `AnkiAudioDownloader.kt` | Port of the original's `AudioDownloader`, which finds each source's candidate audio URLs and downloads the first valid one (see "Marker/template engine"). |
+| `AnkiLanguages.kt` | The original's language descriptors (the ISO codes and English names the audio sources build URLs from) and its default audio sources per language. |
+| `AnkiHttp.kt`, `AnkiHttpUrlConnection.kt`, `AnkiUrls.kt` | The HTTP requests the audio sources make, over `HttpURLConnection`, with the browser's URL encoding. |
+| `AnkiAudioSourceList.kt` | The edits the Audio settings card makes to the source list. |
+| `AnkiMediaFileNames.kt` | Media file names in the original's formats, which are dated for images and content-hashed for audio. |
 | `AnkiStandardMarkers.kt` | The original's standard marker list per entry type, used by the settings UI's marker menu. |
 | `AnkiFieldDefaults.kt` | The original's default field values (first field gets `{expression}`/`{character}`, later fields are matched to markers by name aliases). |
 | `AnkiDroidClient.kt` | Wraps `com.github.ankidroid:Anki-Android:api`'s `AddContentApi` for deck/model/field discovery and note add/update, plus a SQL query of `FlashCardsContract.Note.CONTENT_URI_V2` for the duplicate check (`AddContentApi`'s own duplicate search has no deck scope and covers one note type only). |
@@ -135,6 +141,11 @@ unknown marker is written into the field as `{<marker>-render-error}`, the note 
 updated, and the result message names the unknown markers. The message comes with the refreshed
 entries, so the link is relabeled and recolored as after any other write.
 
+A write shows at most one such message, even when several apply, for the sake of legibility in the
+UI. The first that applies wins, in this order: unknown markers, media files AnkiDroid did not
+accept, an empty `{audio}` (see below), and images Dokuen denied. Denied images come last because
+every add without Dokuen Pro reports them.
+
 Each supported marker reproduces the output of the matching partial in the original's default
 field templates (`ext/data/templates/default-anki-field-templates.handlebars`) under its default
 options: the "group" result mode (one note per popup entry, with every definition of the term
@@ -152,7 +163,7 @@ readings, see below), `cloze-prefix`, `cloze-body`, `cloze-body-kana`, `cloze-su
 `frequency-harmonic-rank`, `frequency-harmonic-occurrence`,
 `frequency-average-rank`, `frequency-average-occurrence`, `glossary` (+ `-brief`,
 `-no-dictionary`, `-plain`, `-plain-no-dictionary`, `-first`, `-first-brief`,
-`-first-no-dictionary`), `screenshot`, `clipboard-image`, and `clipboard-text`.
+`-first-no-dictionary`), `screenshot`, `clipboard-image`, `clipboard-text`, and `audio`.
 
 `{sentence}` and the cloze markers use the sentence around the match (see `AnkiSentenceExtractor`),
 not the whole context text. The host sends the whole OCR block that contains the selection as
@@ -192,7 +203,7 @@ it is empty. The screenshot is requested first, interactively when "{screenshot}
 image, or cancel), then the clipboard image, without UI. Cancelling writes nothing and skips
 the clipboard. The screenshot is encoded per "Image format" (PNG, or JPEG at "JPEG quality");
 the clipboard image is always PNG (see "Deliberate differences"). Each is stored through
-`AnkiDroidClient.addImage` (the plugin's FileProvider and AnkiDroid's media provider), asking for
+`AnkiDroidClient.addMedia` (the plugin's FileProvider and AnkiDroid's media provider), asking for
 `dokuen_screenshot_<date>.png` and `dokuen_clipboard_image_<date>.png` (the original's names
 with a Dokuen prefix, see "Deliberate differences", and the date as `generateAnkiNoteMediaFileName`
 writes it, zero-based month included), and the marker uses the name AnkiDroid stored it under. The
@@ -211,6 +222,55 @@ not gate it on Pro). As the original's `clipboard-text` partial does, the text i
 line break. CRLF and lone CR line breaks are first turned into LF, as the original's paste into a
 `<textarea>` does when it reads the clipboard. Dokuen hands over plain text cut
 to 10,000 UTF-16 code units; older Dokuen versions provide none, so the marker is empty there.
+
+`{audio}` prints the original's partial, `[sound:FILE]`, where FILE is the AnkiDroid media file
+name (escaped twice, like the image markers). Without audio, it prints nothing. The plugin
+downloads the audio itself, as the original's backend does (`_injectAnkiNoteAudio` in
+`backend.js`, with the port of `audio-downloader.js` in `AnkiAudioDownloader`), so Dokuen is not
+involved and no Dokuen Pro is needed. The audio is downloaded when a link is tapped, after the
+image and clipboard text requests (the original's order), only for a term (never a kanji) whose
+expression or reading is not empty, and only when `{audio}` is in a field the write keeps
+(`AnkiMediaNeeds`, the same rule as for the images). The sources come from the Audio card (see
+"Settings UI"), read live at tap time. They are tried in order, followed, when "Enable default
+audio sources" is on, by the language's default sources that are not already listed
+(JapanesePod101, LanguagePod101, and Jisho.org for Japanese, and Lingua Libre, LanguagePod101, and
+Wiktionary for other languages). The language is the session language Dokuen reports. Each source
+gives candidate URLs:
+
+- JapanesePod101 gives one URL built from the term and reading.
+- LanguagePod101 and Jisho.org give the audio links in their search pages.
+- Lingua Libre and Wiktionary give the matching files of a Wikimedia Commons search. Each file is
+  looked up for its URL only once the files before it have been tried (see "Deliberate
+  differences").
+- Custom URL gives its URL with `{term}`, `{reading}`, and `{language}` replaced.
+- Custom URL (JSON) gives the `url` of each item in the list that its URL returns.
+
+The first candidate that downloads with a 2xx status wins, except JapanesePod101's placeholder for
+words it has no audio for, which is recognized by its SHA-256 and skipped. The download timeout
+cancels a download that receives nothing for that long. The lookups that find the candidates are
+cancelled after 30 seconds without progress, whatever the download timeout (see "Deliberate
+differences"). Every request sends a User-Agent naming the plugin, its version, and its project page
+(`YomitanForDokuen/<version> (<project URL>)`). A browser always sends a User-Agent, and Wikimedia
+Commons refuses requests without a descriptive one. The file is stored through
+`AnkiDroidClient.addMedia` as `yomitan_audio_<SHA-1 of the file>`, with the extension that the
+response's Content-Type gives (`.mp3` when it is not a known audio type). The plugin keeps the
+original's name because the audio comes from the same sources as on desktop. Every tap downloads
+again, as in the original.
+
+When no source has audio, the field is empty and nothing is reported, as in the original. When a
+download times out, or when every request fails without a response, the note is still written,
+and the message after the save says why `{audio}` is empty. A lookup that times out counts as a
+request without a response, not as a timed-out download, since the download timeout does not
+apply to lookups. In the second case, the message says that there is no network connection only
+when Android reports none (`ConnectivityManager`, hence the `ACCESS_NETWORK_STATE` permission).
+Otherwise, it says that no audio source could be reached, as for a mistyped custom host or a local
+audio server that is not running. Audio that AnkiDroid does not accept is reported like an image
+it does not accept.
+
+Android denies plain-HTTP requests by default, but the original's own custom URL example is
+`http://localhost/...`, and local audio servers are plain HTTP. The plugin's network security
+configuration (`res/xml/network_security_config.xml`) therefore permits cleartext traffic, as a
+browser does.
 
 `{sentence-furigana}` and `{sentence-furigana-plain}` print the cloze sentence with furigana, as
 the original's `createFuriganaHtml` (a `<span class="term">` per term, `<ruby>TEXT<rt>READING</rt></ruby>`
@@ -231,7 +291,7 @@ original prints without furigana data, and the next tap asks again. The readings
 before the image and clipboard text requests.
 
 The duplicate check's key is the first field rendered with the sentence furigana (when Dokuen gave
-it) and with the image and clipboard text markers empty (see "Quirks kept for parity").
+it) and with the image, clipboard text, and audio markers empty (see "Quirks kept for parity").
 
 The four frequency aggregates (`{frequency-harmonic-rank}`, `{frequency-harmonic-occurrence}`,
 `{frequency-average-rank}`, `{frequency-average-occurrence}`) take the first value of each
@@ -240,7 +300,7 @@ declares the other `frequencyMode`: the rank markers skip `occurrence-based` dic
 occurrence markers `rank-based` ones, and both keep a dictionary that declares no mode.
 
 **Markers that resolve to an empty string** (`AnkiTemplateEngine.stubMarkers`) because the
-backing subsystem doesn't exist in the plugin yet: `audio`, `pitch-accents`,
+backing subsystem doesn't exist in the plugin yet: `pitch-accents`,
 `pitch-accent-graphs`, `pitch-accent-graphs-jj`, `pitch-accent-positions`,
 `pitch-accent-categories`,
 `phonetic-transcriptions`, `popup-selection-text`, `url`, and `document-title`.
@@ -374,6 +434,22 @@ default because desktop Yomitan never prompts, or Show crop UI), "Image format" 
 default, or JPEG), and, for JPEG, "JPEG quality" (default 92), the original's `anki.screenshot`
 options. They are read live at tap time, not from the link's settings snapshot.
 
+An "Audio" card (shown after the Images card) holds "Enable Default Audio Sources", the ordered
+audio source list, and "Idle download timeout (in milliseconds)", in that order. The first two
+follow the original's audio sources dialog, and the third is from the original's Anki section, not
+Audio section. These are the original's `audio.sources`, `audio.enableDefaultAudioSources`, and
+`anki.downloadTimeout`, with the same defaults (an empty list, on, and 0, which means no limit).
+Each source has a type and, for the custom types, a URL. It also has move up, move down, and remove
+buttons. An empty list shows nothing in place of the sources, as in the original. The original's
+dialog has an element for an empty list (`#audio-source-list-empty`) that reads "No audio sources
+enabled", but the original's `settings.css` always hides it. The "Add source" button, which is
+labeled "Add" in the original, appends a source of the first type not yet listed, in the order
+JapanesePod101, Jisho.org, LanguagePod101, (Commons) Lingua Libre, (Commons) Wiktionary, and Custom
+URL, or JapanesePod101 when all six are listed, as the original's add button does for Japanese
+(`_getUnusedAudioSourceType` in `audio-controller.js`). The original's Text-to-speech type is left
+out because the plugin has none. A timeout that is not a whole number of at least 0 is not saved.
+Like the image settings, these settings are read live at tap time.
+
 Each format's action-link label is prefixed with a plain shape glyph identifying the format (●
 Big Circle, ◉ Small Circle, ■ Square, and ◆ Diamond, matching the original's 4 icon shapes). As in
 the original, the shape identifies the card format and the color (`InlineStyle.foregroundColor`)
@@ -452,8 +528,8 @@ API surface or a deliberate scope boundary:
   only useful before the first tap, so it would need the per-card-format, per-lookup AnkiDroid
   round-trip that the duplicate check avoids. It is deferred for the same reason (documented in
   `AnkiSettings.kt`).
-- **`{audio}`, the pitch accent markers, and the page-context markers stay empty** until the
-  plugin has the matching subsystem.
+- **The pitch accent markers and the page-context markers stay empty** until the plugin has the
+  matching subsystem.
 - **Only English strings exist.** User-facing strings are in `strings.xml`, but the project has no
   `values-*` locale directory yet, so nothing is translated.
 
@@ -536,8 +612,9 @@ API surface or a deliberate scope boundary:
   instead creates the file with `File.createTempFile(preferredName + "_", ...)`, so the stored
   name gets a random number before the extension
   (`dokuen_screenshot_2026-00-05-03-04-05-006_123456789.png`), and takes its extension
-  from Android's MIME table, which gives `.jpg` for JPEG where the original writes `.jpeg`.
-  AnkiDroid has no other way to add media.
+  from Android's MIME table, which gives `.jpg` for JPEG where the original writes `.jpeg`, and
+  `.oga` for Ogg audio (Wiktionary's files) where the original writes `.ogg`. AnkiDroid has no
+  other way to add media.
 - **A repeated clipboard image is stored again.** The original remembers the last clipboard
   image it stored and, when the clipboard still holds the same image, stores it again under the
   same name, so the notes share one file. Through AnkiDroid each add stores a new file (see the
@@ -554,6 +631,35 @@ API surface or a deliberate scope boundary:
   `dokuen_screenshot_<date>` and `dokuen_clipboard_image_<date>` instead, since the images come
   from Dokuen rather than a browser tab, and the names show which app added them to the
   collection. The date part is the same as the original's.
+- **`{audio}` reports timed-out downloads and unreachable sources.** The original leaves `{audio}`
+  empty without a message whenever its requests fail, even when a download hits the idle timeout.
+  Its code means to report that timeout but never does: `AudioDownloader` cancels the download
+  with `abortController.abort('Idle timeout')`, so the fetch rejects with that string, and
+  `Backend._getAudioDownloadError` recognizes only an `Error` named `AbortError`. The plugin
+  explains the empty field when a download times out. It also explains it when every request fails
+  without a response, saying that there is no network connection or that no source could be
+  reached. Being offline is common on a phone, and the empty field would otherwise go unexplained.
+- **`{audio}`'s lookups time out.** The original has no timeout on the requests that find the
+  candidate audio files (the LanguagePod101, Jisho, Wikimedia Commons, and custom JSON lookups),
+  and only the downloads follow its download timeout (`anki.downloadTimeout`). A lookup that never
+  answers costs nothing in its popup, but here it would hold the Anki write indefinitely, so a
+  lookup is cancelled after 30 seconds without progress (`AnkiAudioDownloader.LOOKUP_TIMEOUT_MILLIS`).
+- **Audio is downloaded only for fields the write keeps**, like the images (see above). On an
+  overwrite, the original downloads it even when the merge then drops it.
+- **There are no text-to-speech audio sources and no preferred audio choice.** The original never
+  exports text-to-speech audio to Anki, and its preferred audio comes from its popup's audio menu,
+  which the plugin does not have, so `{audio}` always takes the first valid file.
+- **Wikimedia Commons files are looked up one at a time, as they are needed.** For Lingua Libre
+  and Wiktionary, the original sends a file-info request for every search hit at once
+  (`Promise.all` in `_getInfoWikimediaCommons`) and tries the files only once every request has
+  answered, because the same lookup also fills its popup's audio menu, which lists every file.
+  `{audio}` only uses the first file that downloads, so the plugin looks up a hit only after the
+  hits before it have failed to download. When the first hit downloads, the source makes three
+  requests (the search, one file-info request, and the download) instead of one file-info request
+  per hit plus the download. A failed file-info request also behaves differently: it ends that
+  source's candidates but keeps the files found before it, where the original loses all of that
+  source's files. The plugin therefore finds audio in a few cases where desktop finds none, and it
+  never misses audio that desktop finds. `AnkiAudioDownloaderTest` covers this.
 
 **Quirks kept for parity.** These may look like defects, but they mirror the original's settings page
 and note builder, so users moving between the two get the same behavior. Change them only if
@@ -604,16 +710,18 @@ Unit tests live under `app/src/test/java/.../anki/` (`AnkiSettingsStoreTest`,
 `AnkiTemplateEngineTest`, `AnkiGlossaryHtmlConverterTest`, `AnkiDictionaryStylesTest`, `AnkiNoteDataBuilderTest`,
 `AnkiSentenceExtractorTest`, `AnkiSentenceFuriganaTest`, `AnkiFieldMergerTest`, `AnkiFieldDefaultsTest`,
 `AnkiStandardMarkersTest`, `AnkiDroidClientTest`, `AnkiFieldChecksumTest`, `TagsTextUtilTest`,
-`AnkiMediaNeedsTest`, `AnkiMediaFileNamesTest`) plus, at the top level,
+`AnkiMediaNeedsTest`, `AnkiMediaFileNamesTest`, `AnkiAudioDownloaderTest`, `AnkiLanguagesTest`,
+`AnkiUrlsTest`, `AnkiHttpUrlConnectionTest`, `AnkiAudioSourceListTest`) plus, at the top level,
 `AnkiE2ETest.kt` (the `onLookup` → action-link → `onExecuteCustomAction` round trip) and
 `AnkiExecutionTest.kt` (tapping a link against a mocked `AnkiDroidClient`: every duplicate
 behavior, a deleted deck or note type, the link labels and colors a tap leaves, the link cache,
 settings changing between render and tap, the sentence and query a scanned term, a tapped
-kanji, and a kanji reached through a headword link each get, and the sentence readings, image, and
-clipboard text requests a tap makes, including cancelled and denied images, through `FakeActionContext`,
-a fake host). All pure-logic classes (the template engine, the glossary converter, the CSS scoping,
-the tag-text utility) have plain JUnit coverage with no Android dependency; everything touching
-`Context`/SharedPreferences/the service class uses Robolectric. All of these run on the JVM.
+kanji, and a kanji reached through a headword link each get, and the sentence readings, image,
+clipboard text, and audio requests a tap makes, including cancelled and denied images, through
+two fakes, `FakeActionContext` for the host and `FakeAnkiHttp` for the web). All pure-logic classes
+(the template engine, the glossary converter, the CSS scoping, the tag-text utility) have plain
+JUnit coverage with no Android dependency; everything touching `Context`/SharedPreferences/the
+service class uses Robolectric. All of these run on the JVM.
 
 `app/src/androidTest/.../anki/AnkiDroidDeviceTest.kt` runs against the AnkiDroid installed on a
 device. It checks that AnkiDroid accepts the duplicate check's SQL and that it finds what it

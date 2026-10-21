@@ -24,4 +24,45 @@ class AnkiMediaFileNamesTest {
         )
         assertEquals("x-y_2026-00-05-03-04-05-006.png", AnkiMediaFileNames.generate("x\u0001y", ".png", timestamp))
     }
+
+    @Test
+    fun hashedNameIsThePrefixAndTheContentsSha1() {
+        // SHA-1 of "abc".
+        assertEquals(
+            "yomitan_audio_a9993e364706816aba3e25717850c26c9cd0d89d.mp3",
+            AnkiMediaFileNames.hashed("yomitan_audio", "abc".toByteArray(), ".mp3")
+        )
+    }
+
+    @Test
+    fun hashedNameReplacesCharactersInvalidInFileNames() {
+        assertEquals(
+            "a-b_7037807198c22a7d2b0807371d763779a84fdfcf.ogg",
+            AnkiMediaFileNames.hashed("a:b", byteArrayOf(1, 2, 3), ".ogg")
+        )
+    }
+
+    @Test
+    fun audioExtensionFollowsTheOriginalsTable() {
+        assertEquals(".aac", AnkiMediaFileNames.audioExtension("audio/aac"))
+        assertEquals(".mp3", AnkiMediaFileNames.audioExtension("audio/mpeg"))
+        assertEquals(".mp3", AnkiMediaFileNames.audioExtension("audio/mp3"))
+        assertEquals(".mp4", AnkiMediaFileNames.audioExtension("audio/mp4"))
+        for (type in listOf("audio/ogg", "audio/vorbis", "application/ogg")) {
+            assertEquals(".ogg", AnkiMediaFileNames.audioExtension(type))
+        }
+        for (type in listOf("audio/vnd.wav", "audio/wave", "audio/wav", "audio/x-wav", "audio/x-pn-wav")) {
+            assertEquals(".wav", AnkiMediaFileNames.audioExtension(type))
+        }
+        assertEquals(".flac", AnkiMediaFileNames.audioExtension("audio/flac"))
+        assertEquals(".webm", AnkiMediaFileNames.audioExtension("audio/webm"))
+    }
+
+    @Test
+    fun audioExtensionFallsBackToMp3() {
+        assertEquals(".mp3", AnkiMediaFileNames.audioExtension(null))
+        assertEquals(".mp3", AnkiMediaFileNames.audioExtension("text/html"))
+        // Compared exactly, as in the original, so a type with parameters matches nothing.
+        assertEquals(".mp3", AnkiMediaFileNames.audioExtension("audio/ogg; codecs=opus"))
+    }
 }

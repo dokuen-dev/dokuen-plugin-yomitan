@@ -289,9 +289,9 @@ class AnkiDroidDeviceTest {
     }
 
     @Test
-    fun addImageStoresAMediaFileANoteCanReference() {
+    fun addMediaStoresAMediaFileANoteCanReference() {
         val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
-        val stored = client.addImage(
+        val stored = client.addMedia(
             AnkiMediaFileNames.generate("dokuen_plugin_test", ".png", System.currentTimeMillis())
         ) { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
 

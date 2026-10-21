@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!-- Audio and dictionary URLs are the user's to choose, and local audio servers (the
+         original's custom URL example is http://localhost/...) are plain HTTP, so cleartext is
+         allowed as it is in a browser. -->
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration" />
+</network-security-config>

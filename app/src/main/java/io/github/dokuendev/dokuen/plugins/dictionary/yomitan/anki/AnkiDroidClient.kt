@@ -67,13 +67,14 @@ class AnkiDroidClient(
     }
 
     /**
-     * Stores an image in AnkiDroid's media collection and returns the file name it was stored
-     * under (AnkiDroid may change [fileName] to keep it unique), or null if [write] or AnkiDroid
-     * refused. [write] writes the encoded image into a temporary file and returns false if it
-     * could not. AnkiDroid reads that file through this app's FileProvider; the file and
-     * AnkiDroid's read grant are removed once AnkiDroid has its own copy.
+     * Stores a media file (an image or audio) in AnkiDroid's media collection and returns the file
+     * name it was stored under (AnkiDroid may change [fileName] to keep it unique), or null if
+     * [write] or AnkiDroid refused. [write] writes the file's content into a temporary file and
+     * returns false if it could not. AnkiDroid reads that file through this app's FileProvider and
+     * takes its type from [fileName]'s extension; the file and AnkiDroid's read grant are removed
+     * once AnkiDroid has its own copy.
      */
-    fun addImage(fileName: String, write: (OutputStream) -> Boolean): String? {
+    fun addMedia(fileName: String, write: (OutputStream) -> Boolean): String? {
         val directory = File(context.cacheDir, MEDIA_CACHE_DIR).apply { mkdirs() }
         val file = File(directory, fileName)
         var uri: Uri? = null

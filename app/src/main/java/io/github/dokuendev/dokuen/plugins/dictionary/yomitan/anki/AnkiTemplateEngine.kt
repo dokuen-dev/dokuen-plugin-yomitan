@@ -25,11 +25,10 @@ object AnkiTemplateEngine {
     private const val OCCURRENCE_BASED = "occurrence-based"
 
     /**
-     * Standard markers whose backing subsystem (audio, pitch accent data, browser page
-     * context) does not exist in this port.
+     * Standard markers whose backing subsystem (pitch accent data, browser page context) does not
+     * exist in this port.
      */
     private val stubMarkers: Set<String> = setOf(
-        "audio",
         "pitch-accents", "pitch-accent-graphs", "pitch-accent-graphs-jj",
         "pitch-accent-positions", "pitch-accent-categories",
         "phonetic-transcriptions", "popup-selection-text",
@@ -57,6 +56,9 @@ object AnkiTemplateEngine {
         // stored media file's name, or nothing when there is no image.
         "screenshot" to { d -> d.screenshotFileName?.let { imageTag(it) } ?: "" },
         "clipboard-image" to { d -> d.clipboardImageFileName?.let { imageTag(it) } ?: "" },
+        // The original's `audio` partial, `[sound:{{getMedia "audio"}}]`, where getMedia escapes
+        // the stored file's name and the double braces escape it again. Without audio, it is empty.
+        "audio" to { d -> d.audioFileName?.let { "[sound:${escape(escape(it))}]" } ?: "" },
         // The original's `clipboard-text` partial, `{{{getMedia "clipboardText"}}}`: getMedia
         // escapes the value and turns each line break into `<br>` plus the line break.
         "clipboard-text" to { d -> d.clipboardText?.let { escape(it).replace("\n", "<br>\n") } ?: "" },
