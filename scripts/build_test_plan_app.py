@@ -22,8 +22,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 # EDIT these two to match where the plan and its checklist live in the repo.
-DEFAULT_SOURCE = HERE.parent / "docs" / "anki-export-manual-test-plan.md"
-DEFAULT_OUTPUT = HERE.parent / "docs" / "anki-test-plan-checklist.html"
+DEFAULT_SOURCE = HERE.parent / "docs" / "anki-export" / "test-plan.md"
+DEFAULT_OUTPUT = HERE.parent / "docs" / "anki-export" / "test-plan-checklist.html"
 TEMPLATE = HERE / "test_plan_app.template.html"
 
 PHASE_RE = re.compile(r"^## Phase (\d+): (.+?)\s*$")

@@ -124,10 +124,9 @@ tokens against structured note data, an `AnkiDroidClient` talks to AnkiDroid dir
 `AddContentApi`/`FlashCardsContract`, and `YomitanDictionaryPluginService` appends one `action:`
 link per configured card format to each rendered lookup entry. Pronunciation audio for the
 `{audio}` marker is downloaded by the plugin itself, so it does not depend on Dokuen. See
-[`docs/anki-export.md`](docs/anki-export.md) for the full architecture, the current marker support
-table, and the feature's known gaps versus the original extension, and
-[`docs/anki-export-manual-test-plan.md`](docs/anki-export-manual-test-plan.md) for the manual test
-procedure.
+[`docs/anki-export/architecture.md`](docs/anki-export/architecture.md) for the full architecture,
+the current marker support table, and the feature's known gaps versus the original extension, and
+[`docs/anki-export/test-plan.md`](docs/anki-export/test-plan.md) for the manual test procedure.
 
 ## Getting Started
 

@@ -74,8 +74,8 @@
       (add, add duplicate, overwrite, prevented) using the original extension's icon colors.
     - A tab-strip, live-editing card-format settings UI (up to 5 formats) with install/permission
       flow for enabling AnkiDroid access.
-    - See `docs/anki-export.md` for the full architecture and known gaps versus the original
-      extension.
+    - See `docs/anki-export/architecture.md` for the full architecture and known gaps versus the
+      original extension.
 
 ## [1.1.1]
 

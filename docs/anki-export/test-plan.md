@@ -14,7 +14,7 @@ The document has two parts:
 Every step in Part 1 has an ID such as `7.13`, and every check in Part 2 has one such as `C2.7`.
 Quote the ID when reporting an issue.
 
-See [`anki-export.md`](anki-export.md) for the architecture of the feature and the accepted gaps
+See [`architecture.md`](architecture.md) for the architecture of the feature and the accepted gaps
 this plan refers to.
 
 ---
@@ -350,9 +350,9 @@ default is the intended value: choosing a note type fills the first field with `
 (term) or `{character}` (kanji), and every other field with the marker it is named after. The one
 exception is `single-frequency-number`: a field is only filled with a marker from the original's
 standard marker list, which leaves that marker out, so the field stays empty on both platforms and
-is typed by hand (see "Settings UI" in `anki-export.md`). The note type is chosen last because
+is typed by hand (see "Settings UI" in `architecture.md`). The note type is chosen last because
 changing a format's type does not refill its fields (see "Quirks kept for parity" in
-`anki-export.md`).
+`architecture.md`).
 
 Each format's role: `AuditVocab` and `AuditKanjiFmt` add the notes the check script compares;
 `AuditSub` targets the sub-deck, for the deck-root scope test (9.15, 9.16) and the missing-deck
@@ -548,18 +548,18 @@ exactly:
 | Screenshot format / quality | advanced | Anki Export tab, **Images** card, with "{screenshot} behavior" | As in the original, they do not apply to `{clipboard-image}`, which is PNG. "{screenshot} behavior" chooses between the whole screen Dokuen scanned and Dokuen's crop UI; desktop has no such choice and never prompts. |
 | Idle download timeout | advanced | absent | There is no `{audio}` content yet. |
 | Suspend new cards | advanced toggle | absent | AnkiDroid's API has no equivalent. |
-| Note viewer window (Browse/Edit) | select, and a "View added note" button after an add | absent: no link to a note | AnkiDroid has no API for opening its note editor, and on Android 14 and later a plugin cannot open AnkiDroid's card browser either (see `anki-export.md`). |
+| Note viewer window (Browse/Edit) | select, and a "View added note" button after an add | absent: no link to a note | AnkiDroid has no API for opening its note editor, and on Android 14 and later a plugin cannot open AnkiDroid's card browser either (see `architecture.md`). |
 | Show card tags and flags | never/always/non-standard/custom + target tags | absent | It would need an AnkiDroid round trip per card format on every lookup (documented in `AnkiSettings.kt`). |
 | Force Anki sync on adding card | advanced toggle | absent | AnkiDroid's API has no equivalent. |
 | Configure Anki flashcards… | dialog | tab-strip, always-visible editor | Same content in a layout suited to the device; both save as you edit. |
 | Configure Anki card templates… (raw Handlebars) | advanced dialog | absent | A documented non-goal. |
 | Card format count | at most 5; the last cannot be deleted | same | |
-| Defaults | tags `yomitan`; Allow adding; formats Expression, Reading, Kanji | tags `dokuen-yomitan`; otherwise the same | The tag differs on purpose, so notes from the two can be told apart (see `anki-export.md`). |
-| After an add | the button changes to its duplicate variant (disabled under Prevent adding) | the link reads **Added: F** (**Overwritten: F** after an overwrite) in the color of its duplicate variant, and stays tappable; under Prevent adding a second tap reports that the note already exists | A link cannot be disabled; the label reports what the tap did (see "After a tap" in `anki-export.md`). |
-| An add with an unknown marker | the note is added and its button changes; the error is shown | the note is added, and a message naming the marker is shown instead of the refreshed result | The host shows either a refreshed result or a message after a tap, not both (see "Marker/template engine" in `anki-export.md`). |
+| Defaults | tags `yomitan`; Allow adding; formats Expression, Reading, Kanji | tags `dokuen-yomitan`; otherwise the same | The tag differs on purpose, so notes from the two can be told apart (see `architecture.md`). |
+| After an add | the button changes to its duplicate variant (disabled under Prevent adding) | the link reads **Added: F** (**Overwritten: F** after an overwrite) in the color of its duplicate variant, and stays tappable; under Prevent adding a second tap reports that the note already exists | A link cannot be disabled; the label reports what the tap did (see "After a tap" in `architecture.md`). |
+| An add with an unknown marker | the note is added and its button changes; the error is shown | the note is added, and a message naming the marker is shown instead of the refreshed result | The host shows either a refreshed result or a message after a tap, not both (see "Marker/template engine" in `architecture.md`). |
 | Changing settings | at any time; an open popup keeps working | only while Dokuen's overlay (and so the dictionary window) is hidden | Dokuen does not let a plugin's settings change while its overlay is shown; a result from before the change is gone once the overlay is hidden. |
-| Duplicate state before a tap | each button shows its duplicate variant as soon as the popup opens | every link is green and reads **Add** until a link of that entry is tapped; the tap then colors that entry's links | Checking on every lookup would cost an AnkiDroid query per format per lookup (see "Link colors" and "Known limitations" in `anki-export.md`). |
-| Icons | shape identifies the format; color shows the duplicate state: green, purple (add duplicate), orange (overwrite), gray (disabled) | a glyph (● ◉ ■ ◆) identifies the format; the same colors, without the disabled button's transparency | See "Link colors" in `anki-export.md`. |
+| Duplicate state before a tap | each button shows its duplicate variant as soon as the popup opens | every link is green and reads **Add** until a link of that entry is tapped; the tap then colors that entry's links | Checking on every lookup would cost an AnkiDroid query per format per lookup (see "Link colors" and "Known limitations" in `architecture.md`). |
+| Icons | shape identifies the format; color shows the duplicate state: green, purple (add duplicate), orange (overwrite), gray (disabled) | a glyph (● ◉ ■ ◆) identifies the format; the same colors, without the disabled button's transparency | See "Link colors" in `architecture.md`. |
 
 ## R8. What the check script checks
 
@@ -587,7 +587,7 @@ says otherwise; the checks also give the exact value wherever it is known in adv
 | C2.6 | `dictionary-alias` | T1 | `Jitendex.org [2026-05-05]` on both. The plugin has no per-dictionary alias setting, so the alias is the dictionary title (the original's default). |
 | C2.7 | `tags` | T1, T2, T3, T6 | Identical on both: every tag name, comma-separated, headword tags first, then each definition's tags, including tags that have no tag-bank entry. T1 includes `★`; T2 `★` and `priority form`; T3 is empty; T6 lists the tags of both definitions, `★` and `place`. |
 | C2.8 | `part-of-speech` | all | For T1, exactly `Ichidan verb` on the plugin, derived from the rule code `v1`. Desktop's value is recorded for every note; it need not match, because desktop renders it from tags. |
-| C2.9 | `conjugation` | T4 | The chain of conjugations undone from 食べさせられた to 食べる. On the plugin, exactly `-せる・させる « -られる « -た`, the compact Japanese names its popup shows. Desktop's value is recorded; it is expected to be `causative « potential or passive « -た`, the same chain under the original's English names (a deliberate difference, see "Deliberate differences" in `anki-export.md`). |
+| C2.9 | `conjugation` | T4 | The chain of conjugations undone from 食べさせられた to 食べる. On the plugin, exactly `-せる・させる « -られる « -た`, the compact Japanese names its popup shows. Desktop's value is recorded; it is expected to be `causative « potential or passive « -た`, the same chain under the original's English names (a deliberate difference, see "Deliberate differences" in `architecture.md`). |
 | C2.10 | `Glossary`, `glossary-brief`, `glossary-no-dictionary` | all | Identical on both, apart from the text of Jitendex's `<style>` elements and images (R9). Structured content itself is C7; T6 is C5. |
 | C2.11 | `glossary-plain` | all | Identical on both, with no `<style>`. |
 | C2.12 | `glossary-plain-no-dictionary` | T1 | Identical on both: the same text as T1's `glossary-plain`, without its `(Jitendex.org [2026-05-05])<br>` line. |
@@ -598,7 +598,7 @@ says otherwise; the checks also give the exact value wherever it is known in adv
 | C2.17 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix`, `cloze-body-kana`, `search-query` | T8 | See C4.1. |
 | C2.18 | `search-query` | T1 | `食べる` on both. |
 | C2.19 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix`, `cloze-body-kana` | T1 to T7 | Identical on both; the exact values are C4.4. |
-| C2.20 | `sentence-furigana`, `sentence-furigana-plain` | all | On both, each is identical apart from the `<span class="term">` boundaries in `sentence-furigana`, which follow each platform's own word segmentation (see "Deliberate differences" in `anki-export.md`). A reading that differs is a finding to check against that section: Dokuen's furigana can legitimately differ from desktop's dictionaries. |
+| C2.20 | `sentence-furigana`, `sentence-furigana-plain` | all | On both, each is identical apart from the `<span class="term">` boundaries in `sentence-furigana`, which follow each platform's own word segmentation (see "Deliberate differences" in `architecture.md`). A reading that differs is a finding to check against that section: Dokuen's furigana can legitimately differ from desktop's dictionaries. |
 | C2.21 | `audio`, `popup-selection-text`, `url`, `document-title`, `phonetic-transcriptions`, `pitch-accents`, `pitch-accent-graphs`, `pitch-accent-graphs-jj`, `pitch-accent-positions`, `pitch-accent-categories` | all | Empty on the plugin: the markers have no backing subsystem yet, a documented scope boundary. Desktop may fill some of them, depending on its own state (configured audio sources), so desktop's values are recorded, not compared. |
 | C2.22 | every other field | all | Identical on both. |
 | C2.23 | `screenshot`, `clipboard-image`, `clipboard-text` | all | Recorded on both, not compared: each platform fills them from its own screen and clipboard when the note is added. Phase 13 checks them by hand. |
@@ -636,8 +636,8 @@ platforms.
 | C6.4 | `Glossary` | K1, K2 | Identical on both. |
 | C6.5 | `onyomi-hiragana` | K1 | Exactly `しょく, じき` on the plugin (katakana `ショク ジキ` converted to hiragana), matching desktop's hiragana-converted onyomi. |
 | C6.6 | `stroke-count` | K1, K2 | Exactly `Stroke count: 9` (K1) and `Stroke count: 11` (K2) on both. |
-| C6.7 | `search-query` | K1, K2 | `食べる` / `動き出す` on both: a kanji reached from a term's headword keeps the term lookup's query, which is longer than the kanji (see `{search-query}` under "Marker/template engine" in `anki-export.md`). |
-| C6.8 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix` | K2 | Exactly `電車が動き出す前に座った。`, `電車が`, `動`, `き出す前に座った。` on both: the kanji carries the term's sentence, and the cloze is split at the term's position (see "Quirks kept for parity" in `anki-export.md`). |
+| C6.7 | `search-query` | K1, K2 | `食べる` / `動き出す` on both: a kanji reached from a term's headword keeps the term lookup's query, which is longer than the kanji (see `{search-query}` under "Marker/template engine" in `architecture.md`). |
+| C6.8 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix` | K2 | Exactly `電車が動き出す前に座った。`, `電車が`, `動`, `き出す前に座った。` on both: the kanji carries the term's sentence, and the cloze is split at the term's position (see "Quirks kept for parity" in `architecture.md`). |
 | C6.9 | `sentence`, `cloze-prefix`, `cloze-body`, `cloze-suffix` | K1 | Exactly `食べる。`, empty, `食`, `べる。` on both, as for K2. |
 | C6.10 | every other field | K1, K2 | Identical on both. |
 
@@ -671,7 +671,7 @@ dictionary. Jitendex's CSS has two comments, comma-separated selector lists, nes
 `color-mix()`/`var()` values, but no `@media` or other at-rules. Its text is expected to differ
 from desktop's: desktop re-serializes the CSS through the browser, which respells values (for
 example `#565656` becomes `rgb(86, 86, 86)`) and normalizes whitespace, and the plugin does not (see
-"The CSS in glossary `<style>` elements is not re-serialized by a browser" in `anki-export.md`).
+"The CSS in glossary `<style>` elements is not re-serialized by a browser" in `architecture.md`).
 
 - **C7.1** The wrapper (`<div>`, `<ol>`, `<li data-dictionary=...>`, `<i>(...)</i>` prefix) matches desktop for every note in the table.
 - **C7.2** T1: the whole definition matches desktop, including every `data-sc-*`, `style`, `lang`, and `title` attribute, the ruby, and the external links' `href`s.
@@ -697,7 +697,7 @@ example `#565656` becomes `rgb(86, 86, 86)`) and normalizes whitespace, and the 
 
 ### C10. Unknown marker (TB)
 
-- **C10.1** TB is added on both (a template error does not stop the export), with its `Reading` field exactly `{expresion-render-error}` (see "Marker/template engine" in `anki-export.md`). The message is compared by hand (7.20, 8.22).
+- **C10.1** TB is added on both (a template error does not stop the export), with its `Reading` field exactly `{expresion-render-error}` (see "Marker/template engine" in `architecture.md`). The message is compared by hand (7.20, 8.22).
 
 ## R9. Known exceptions, and what the plan does not cover
 
@@ -715,4 +715,4 @@ The pinned dictionaries don't exercise these converter cases, so this plan does 
 - `<details>`/`<summary>` elements: Jitendex does not use them.
 - Turning export off while a result is open, and then tapping one of its links: the plugin's settings cannot be reached while the dictionary window is open. `AnkiExecutionTest` covers it (`turningExportOffAfterRenderingRefusesTheTap`).
 - Wildcard searches: Dokuen has no dictionary search. A large result's links are tested with a kana scan instead (12.2).
-- The intentional `{glossary-plain}` deviation (a `>` inside an attribute value, which desktop leaves behind as the literal typo `&rt;` and the plugin as `&gt;`; see "Deliberate differences" in `anki-export.md`): no Jitendex entry has a `>` in an attribute value.
+- The intentional `{glossary-plain}` deviation (a `>` inside an attribute value, which desktop leaves behind as the literal typo `&rt;` and the plugin as `&gt;`; see "Deliberate differences" in `architecture.md`): no Jitendex entry has a `>` in an attribute value.

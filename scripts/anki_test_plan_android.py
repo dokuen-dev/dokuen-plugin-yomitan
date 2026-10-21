@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Runs the Android steps of the manual Anki export test plan (docs/anki-export-manual-test-plan.md)
+"""Runs the Android steps of the manual Anki export test plan (docs/anki-export/test-plan.md)
 on a connected device, and walks the tester through the steps it cannot do. It is an optional
-assistant to the plan, which stands on its own; see docs/anki-test-plan-android-runner.md.
+assistant to the plan, which stands on its own; see docs/anki-export/test-plan-runner.md.
 
   python scripts/anki_test_plan_android.py run                 every step, from 1.1
   python scripts/anki_test_plan_android.py run --from 8.1      from step 8.1 on
@@ -77,7 +77,7 @@ AGENT_MAIN_CLASS = 'com.wetest.uia2.Main'
 CHROME = 'com.android.chrome'
 ANKIDROID = 'com.ichi2.anki'
 PLAY_STORE = 'com.android.vending'
-PLAN_FILE = os.path.join(plan.REPO, 'docs', 'anki-export-manual-test-plan.md')
+PLAN_FILE = os.path.join(plan.REPO, 'docs', 'anki-export', 'test-plan.md')
 PAGE_PATH = '/' + plan.PAGE_NAME
 # The dashboard's fixed footer, which covers the bottom of each tab's list.
 FOOTER_TEXT = 'Launch Dokuen Japanese Reader'

@@ -21,7 +21,7 @@ import java.io.File
 
 /**
  * The Android side of scripts/anki_test_plan.py, which sets up and checks the manual Anki export
- * test plan (docs/anki-export-manual-test-plan.md). Each action writes its result as JSON to a
+ * test plan (docs/anki-export/test-plan.md). Each action writes its result as JSON to a
  * file in the app's files directory, which the script reads back with `run-as`.
  *
  * These are instrumented tests only so that they run inside the plugin's own process, which holds

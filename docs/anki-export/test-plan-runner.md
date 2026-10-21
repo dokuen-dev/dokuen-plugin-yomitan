@@ -1,8 +1,8 @@
 # Anki Export Test Plan: Android Runner
 
 `scripts/anki_test_plan_android.py` is an optional assistant for the
-[manual test plan](anki-export-manual-test-plan.md). The plan, with its checklist page
-(`anki-test-plan-checklist.html`), is the required procedure, and it is complete without the
+[manual test plan](test-plan.md). The plan, with its checklist page
+(`test-plan-checklist.html`), is the required procedure, and it is complete without the
 runner: every step can be done by hand. The runner only takes over some of that work. It does the
 plan's Android steps on the connected device, checks what each step asks to confirm, and, for the
 steps it cannot do, shows the step and asks the tester. A tester may use it for the whole plan, for

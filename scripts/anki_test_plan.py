@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sets up and checks the manual Anki export test plan (docs/anki-export-manual-test-plan.md).
+"""Sets up and checks the manual Anki export test plan (docs/anki-export/test-plan.md).
 
 The plan runs in three parts: this script's "setup" command, the plan's manual steps, and this
 script's "check" command.

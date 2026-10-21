@@ -746,7 +746,7 @@ restart the plugin's service in the host afterwards.
 
 For the manual, device-level verification procedure (setup, pinned revisions of five real
 dictionaries as test data, and step-by-step parity checks against desktop Yomitan), see
-[`anki-export-manual-test-plan.md`](anki-export-manual-test-plan.md).
+[`test-plan.md`](test-plan.md).
 
 That plan is driven by `scripts/anki_test_plan.py`. Its `setup` command, run before the manual
 steps, builds and installs the plugin and its test helper, creates the plan's decks and note types
