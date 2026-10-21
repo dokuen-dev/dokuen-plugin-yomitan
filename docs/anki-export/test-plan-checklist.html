@@ -113,7 +113,7 @@ textarea{font:inherit;width:100%;border-radius:8px;border:1px solid var(--border
 <script>
 const PLAN = {
 "source":"test-plan.md",
-"hash":"ccf79e91a4b2",
+"hash":"f8c6bfbcb7b9",
 "preamble":[
 {"t": "p", "x": "Follow the phases in order and do every step exactly as written. Everything is done on the device, apart from running the scripts in a desktop terminal."},
 {"t": "p", "x": "Throughout:"},
@@ -130,7 +130,7 @@ const PLAN = {
 ["2.2", "Confirm it prints **Setup complete**. If it prints **Setup found problems** instead, fix each problem it lists and run it again."],
 ["2.3", "Leave it running until 14.1. It serves the test page (R5) that every scan uses, and has opened it in Chrome on the device. (If you stop and resume another day, `python scripts/anki_test_plan.py serve` serves it again.)"]
 ]},
-{"n":3,"title":"Plugin defaults, AnkiDroid and permissions (Android)","note":"Setup reset the plugin's Anki settings to the defaults.","steps":[
+{"n":3,"title":"Plugin defaults, AnkiDroid, and permissions (Android)","note":"Setup reset the plugin's Anki settings to the defaults.","steps":[
 ["3.1", "Desktop terminal: run these two commands. The first withdraws the plugin's AnkiDroid permission (and closes the plugin if it is open); the second uninstalls AnkiDroid but keeps its collection, which comes back when AnkiDroid is installed again in 3.3.", [{"x": "`adb shell pm revoke io.github.dokuendev.dokuen.plugins.dictionary.yomitan com.ichi2.anki.permission.READ_WRITE_DATABASE`"}, {"x": "`adb shell pm uninstall -k --user 0 com.ichi2.anki`"}]],
 ["3.2", "Android: open the plugin's dashboard, **Anki Export** tab. Confirm it shows only the **Enable Anki export** switch, off, and nothing below it: the other settings and the card formats appear only once it is on."],
 ["3.3", "Tap **Enable Anki export**. Confirm an \"AnkiDroid required\" dialog appears with an **Install AnkiDroid** button. Tap the button and confirm the Play Store (or a browser) opens at AnkiDroid. Install AnkiDroid from the Play Store (if a browser opened, from the Play Store app), then return to the plugin's **Anki Export** tab."],

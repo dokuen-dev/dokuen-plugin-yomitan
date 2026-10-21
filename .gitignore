@@ -45,3 +45,6 @@ Thumbs.db
 
 # Generated test reports
 /anki-test-plan-reports/
+
+# Python bytecode from the scripts
+__pycache__/

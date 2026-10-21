@@ -83,7 +83,7 @@ message takes the place of the one about images.
 - [ ] **2.2** Confirm it prints **Setup complete**. If it prints **Setup found problems** instead, fix each problem it lists and run it again.
 - [ ] **2.3** Leave it running until 14.1. It serves the test page (R5) that every scan uses, and has opened it in Chrome on the device. (If you stop and resume another day, `python scripts/anki_test_plan.py serve` serves it again.)
 
-## Phase 3: Plugin defaults, AnkiDroid and permissions (Android)
+## Phase 3: Plugin defaults, AnkiDroid, and permissions (Android)
 
 Setup reset the plugin's Anki settings to the defaults.
 
