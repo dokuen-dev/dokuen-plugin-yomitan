@@ -1,8 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
-    id("com.google.devtools.ksp") version "2.3.2"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.10"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.4.0"
+    id("com.google.devtools.ksp") version "2.3.12"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.4.21"
 }
 
 android {
@@ -41,6 +41,12 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                // Robolectric's FileDescriptor interceptor reflects into jdk.internal.access, which
+                // the JDK doesn't export to it. Without this, Robolectric tests that start the app
+                // fail with an IllegalAccessException.
+                it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+            }
         }
     }
 
