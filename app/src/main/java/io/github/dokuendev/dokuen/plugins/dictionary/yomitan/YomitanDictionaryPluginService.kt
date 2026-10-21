@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.util.Log
+import androidx.core.content.edit
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioDownloader
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiAudioResult
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.anki.AnkiCardFormat
@@ -154,6 +155,13 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
 
     companion object {
         private const val TAG = "YomitanService"
+
+        /**
+         * The SharedPreferences key (in yomitan_prefs) of the plugin SDK version of the host that
+         * last initialized the plugin: empty when that host sent none (one older than SDK 0.7.0).
+         * The Anki export test plan's scripts read it to know which expectations apply.
+         */
+        internal const val HOST_SDK_VERSION_PREF = "host_sdk_version"
 
         /** How many lookups keep their action links tappable. */
         private const val ANKI_CACHE_CAPACITY = 10
@@ -396,6 +404,9 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
             renderer = YomitanRenderer(db, cssProcessor)
 
             val prefs = applicationContext.getSharedPreferences("yomitan_prefs", MODE_PRIVATE)
+            prefs.edit {
+                putString(HOST_SDK_VERSION_PREF, config?.getString(PluginHostConfigKeys.HOST_SDK_VERSION) ?: "")
+            }
             val joined = prefs.getString("active_dictionaries", "") ?: ""
             activeDictionaryTitles = joined.split(",").filter { it.isNotEmpty() }
             sortFrequencyDictionary = prefs.getString("sort_frequency_dictionary", "") ?: ""

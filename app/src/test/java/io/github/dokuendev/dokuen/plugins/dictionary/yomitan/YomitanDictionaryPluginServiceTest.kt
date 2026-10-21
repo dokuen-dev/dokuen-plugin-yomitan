@@ -1181,4 +1181,21 @@ class YomitanDictionaryPluginServiceTest {
             }
         }
     }
+
+    @Test
+    fun `onInitialize saves the host SDK version the host sends`() = runBlocking {
+        val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+        service.onInitialize(Bundle().apply { putString(PluginHostConfigKeys.HOST_SDK_VERSION, "0.8.0") })
+        val prefs = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        assertEquals("0.8.0", prefs.getString(YomitanDictionaryPluginService.HOST_SDK_VERSION_PREF, null))
+    }
+
+    @Test
+    fun `onInitialize saves an empty host SDK version when the host sends none`() = runBlocking {
+        val prefs = app.getSharedPreferences("yomitan_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString(YomitanDictionaryPluginService.HOST_SDK_VERSION_PREF, "0.8.0").commit()
+        val service = Robolectric.buildService(YomitanDictionaryPluginService::class.java).create().get()
+        service.onInitialize(Bundle())
+        assertEquals("", prefs.getString(YomitanDictionaryPluginService.HOST_SDK_VERSION_PREF, null))
+    }
 }

@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
+import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.YomitanDictionaryPluginService
 import io.github.dokuendev.dokuen.plugins.dictionary.yomitan.db.AppDatabase
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -190,7 +191,10 @@ class AnkiTestPlanHelper {
         write("resetAnkiSettings", JSONObject().put("removed", removed))
     }
 
-    /** The plugin's installed dictionaries, their search order and its stored Anki settings. */
+    /**
+     * The plugin's installed dictionaries, their search order, its stored Anki settings, and the SDK
+     * version of the host that last initialized it.
+     */
     @Test
     fun dumpPluginState() {
         requireAction("dumpPluginState")
@@ -206,6 +210,14 @@ class AnkiTestPlanHelper {
                 .put("dictionaries", dictionaries)
                 .put("activeDictionaries", list("active_dictionaries"))
                 .put("sortFrequencyDictionary", prefs.getString("sort_frequency_dictionary", "") ?: "")
+                .put(
+                    "hostSdkVersion",
+                    if (prefs.contains(YomitanDictionaryPluginService.HOST_SDK_VERSION_PREF)) {
+                        prefs.getString(YomitanDictionaryPluginService.HOST_SDK_VERSION_PREF, "")
+                    } else {
+                        JSONObject.NULL
+                    }
+                )
                 .put("ankiSettings", prefs.getString("anki_settings", null)?.let { JSONObject(it) } ?: JSONObject.NULL)
         )
     }
