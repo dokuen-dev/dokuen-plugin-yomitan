@@ -43,6 +43,7 @@ with 1 if any step failed.
 
 import argparse
 import base64
+import colorsys
 import contextlib
 import datetime
 import html
@@ -107,10 +108,14 @@ HEADWORD_HEIGHT = (28, 38)
 HEADWORD_TEXT = re.compile('^[ぁ-ヿ㐀-䶿一-鿿々〆]+$')
 LINK_PATTERN = re.compile(r'^(\S)\s+(Add|Added|Overwritten): (.+)$')
 # The link colors of R7, as the plugin draws them (AnkiLinkStatus in
-# YomitanDictionaryPluginService.kt), and how far a sampled pixel may be from one to count as it.
+# YomitanDictionaryPluginService.kt). A screen can show them lighter and less saturated, which
+# moves green close to gray, so a link's color is told by its hue, and gray by its lack of one:
+# below GRAY_CHROMA (the largest minus the smallest channel), and otherwise within HUE_TOLERANCE
+# degrees of a color's hue.
 LINK_COLORS = {'green': (0x6F, 0xB5, 0x58), 'purple': (0xD0, 0x8A, 0xE7), 'orange': (0xFF, 0x87, 0x27),
                'gray': (0x9F, 0x9F, 0x9F)}
-COLOR_TOLERANCE = 70
+GRAY_CHROMA = 25
+HUE_TOLERANCE = 40
 
 
 class StepFailed(Exception):
@@ -217,6 +222,18 @@ class Device:
                 self.tap(not_now)
                 time.sleep(1)
                 return True
+        # The first time AnkiDroid starts after an update, which the Play Store can install during a
+        # run, it opens on its changelog in place of the deck list, and then asks whether to share
+        # feature usage. Continue closes each, leaving the sharing off.
+        for title, name in (('AnkiDroid Changelog', 'changelog'),
+                            ('Help make AnkiDroid better!', 'request to share feature usage')):
+            if any(node.package == ANKIDROID and node.text == title for node in nodes):
+                proceed = first([node for node in nodes if node.package == ANKIDROID and node.text == 'Continue'])
+                if proceed is not None:
+                    print('    (dismissed AnkiDroid\'s %s)' % name)
+                    self.tap(proceed)
+                    time.sleep(1)
+                    return True
         return False
 
     def tap(self, target):
@@ -293,6 +310,12 @@ class Device:
 
 def by_text(nodes, text, cls=None):
     return [node for node in nodes if node.text == text and (cls is None or node.cls == cls)]
+
+
+def picker_grid(nodes):
+    """The grid of photos in Android's photo picker: described "Media grid", or, depending on the
+    Android version, a grid with no description."""
+    return first(by_desc(nodes, 'Media grid')) or first([node for node in nodes if node.rid == 'picker_tab_recyclerview'])
 
 
 def by_desc(nodes, desc):
@@ -580,6 +603,9 @@ class Dokuen:
                     device.tap(device.wait(lambda nodes: first(by_text(nodes, 'Share one app')), 5) or mode)
                 else:
                     device.tap(first(by_text(nodes, 'Next')) or first(by_text(nodes, 'Start now')) or mode)
+            elif by_text(nodes, 'Start now'):
+                # Before Android 14 there was no "Share one app" option. The prompt has only "Start now".
+                device.tap(first(by_text(nodes, 'Start now')))
             elif by_text(own, 'I Understand'):
                 device.tap(first(by_text(own, 'I Understand')))
             elif by_text(own, 'Start'):
@@ -613,7 +639,7 @@ class Dokuen:
             own = [node for node in nodes if node.package == HOST]
             if by_text(nodes, 'Choose app to share'):
                 device.press('back')
-            elif any(node.rid == 'screen_share_mode_options' for node in nodes):
+            elif any(node.rid == 'screen_share_mode_options' for node in nodes) or by_text(nodes, 'Start now'):
                 # Android's share prompt, from a start that did not finish.
                 device.tap(first(by_text(nodes, 'Cancel')))
             elif by_text(own, 'I Understand'):
@@ -858,17 +884,21 @@ class Dokuen:
         for _ in range(25):
             if popup is None:
                 raise StepFailed('The dictionary window closed')
+            shown = None
             for entry in popup.entries():
                 if entry.headword == headword and (reading is None or entry.reading == reading):
                     if card_format is None or entry.link(card_format) is not None:
                         return entry
                     seen_header = True
+                    shown = entry
             if seen_header and card_format is not None:
                 # The entry is taller than the window: its links are the first ones below its
-                # headword, now scrolled into view.
-                links = [node for node in popup.links if node.top > popup.window.top]
-                headers = popup.headers()
-                next_header = headers[0][0][0].top if headers else 1 << 30
+                # headword, now scrolled into view. While the headword is still shown, the links
+                # above it are the previous entry's.
+                start = shown.header[0].bottom if shown is not None else popup.window.top
+                links = [node for node in popup.links if node.top > start]
+                headers = [row[0].top for row, _ in popup.headers() if row[0].top > start]
+                next_header = min(headers) if headers else 1 << 30
                 own = [node for node in links if node.top < next_header]
                 if own:
                     entry = Entry(headword, reading, [], own)
@@ -982,12 +1012,12 @@ class Dokuen:
         confirms the crop UI, which now shows that photo, without cropping it."""
         device = self.device
         device.tap(first(by_text(self.crop_ui() or [], 'Use a file instead')) or (0, 0))
-        grid = device.wait(lambda nodes: first(by_desc(nodes, 'Media grid')), 15)
+        grid = device.wait(picker_grid, 15)
         if grid is None:
             raise StepFailed('"Use a file instead" opened no photo picker')
 
         def photos(nodes):
-            grid_now = first(by_desc(nodes, 'Media grid'))
+            grid_now = picker_grid(nodes)
             return [node for node in nodes if grid_now is not None and node.clickable and grid_now.contains(node)
                     and node is not grid_now] or None
         shown = device.wait(photos, 10)
@@ -997,7 +1027,7 @@ class Dokuen:
         else:
             # The picker can show its photos without marking them as tappable: tap where the top
             # left one is, in a grid of three columns.
-            grid = first(by_desc(device.nodes(), 'Media grid')) or grid
+            grid = picker_grid(device.nodes()) or grid
             side = grid.width / 3
             device.tap((grid.left + side / 2, grid.top + side / 2))
         # Some versions of the picker return the photo when it is tapped; others check it and wait
@@ -2524,10 +2554,23 @@ class Run:
         ink = [pixel for pixel in pixels if distance(pixel, background) > 90]
         if not ink:
             return None
+        # The half of the ink farthest from the background, averaged, leaves out the anti-aliased
+        # edges, which a glyph such as ◉ has many of.
         ink.sort(key=lambda pixel: distance(pixel, background))
-        sample = ink[len(ink) * 3 // 4]
-        name, color = min(LINK_COLORS.items(), key=lambda item: distance(sample, item[1]))
-        return name if distance(sample, color) <= COLOR_TOLERANCE else 'unknown %02X%02X%02X' % sample
+        core = ink[len(ink) // 2:]
+        sample = tuple(sum(pixel[channel] for pixel in core) // len(core) for channel in range(3))
+        if max(sample) - min(sample) < GRAY_CHROMA:
+            return 'gray'
+
+        def hue(color):
+            return colorsys.rgb_to_hsv(*[channel / 255 for channel in color])[0] * 360
+
+        def hue_distance(color):
+            difference = abs(hue(sample) - hue(color)) % 360
+            return min(difference, 360 - difference)
+        name, color = min([item for item in LINK_COLORS.items() if item[0] != 'gray'],
+                          key=lambda item: hue_distance(item[1]))
+        return name if hue_distance(color) <= HUE_TOLERANCE else 'unknown %02X%02X%02X' % sample
 
     def check_links(self, entry, expected, image):
         """expected: card format -> (label word, color, glyph or None)."""
@@ -2668,8 +2711,19 @@ def remove_ankidroid(run):
     run.adb('shell', 'pm', 'revoke', plan.PACKAGE, ANKIDROID_PERMISSION)
     # Android also remembers that the permission was denied before: after two denials it stops
     # asking, and the plugin offers "Open settings" instead of 3.4's Grant permission. Clearing
-    # that makes every run start as the first one does.
-    run.adb('shell', 'pm', 'clear-permission-flags', plan.PACKAGE, ANKIDROID_PERMISSION, 'user-set', 'user-fixed')
+    # that makes every run start as the first one does. Android versions below 13 have no command
+    # for it (pm help, which lists the commands, exits with an error code after printing them).
+    if 'clear-permission-flags' in run.adb('shell', 'pm help 2>&1 || true'):
+        run.adb('shell', 'pm', 'clear-permission-flags', plan.PACKAGE, ANKIDROID_PERMISSION, 'user-set', 'user-fixed')
+    else:
+        output = run.adb('shell', 'dumpsys', 'package', plan.PACKAGE)
+        flags = re.search(re.escape(ANKIDROID_PERMISSION) + r': granted=\w+, flags=\[([^\]]*)\]', output)
+        if flags and 'USER_SET' in flags.group(1):
+            # There, clearing the plugin's data is the only way to forget the earlier answer.
+            raise StepFailed('Android remembers an earlier answer to the AnkiDroid permission prompt, which '
+                             'this Android cannot clear, so 3.4 cannot pass. Run "adb shell pm clear %s", '
+                             'which also deletes the plugin\'s dictionaries, import them again (R3), and '
+                             'start the run again' % plan.PACKAGE)
     run.adb('shell', 'pm', 'uninstall', '-k', '--user', '0', ANKIDROID)
     run.check(not run.installed(ANKIDROID), 'AnkiDroid is uninstalled')
     run.check(not run.permission_granted(), 'the plugin does not hold the AnkiDroid permission')
@@ -3781,9 +3835,11 @@ def delete_sub_deck(run):
         expander = first([node for node in nodes if node.package == ANKIDROID and node.desc == 'Expand'
                           and abs(node.center[1] - parent.center[1]) < 30])
         if expander is not None:
-            device.tap(expander)
+            # Dokuen's floating button can cover the expander's center, so tap near its left edge.
+            device.tap((expander.left + expander.width / 5, expander.center[1]))
         return None
-    sub = device.wait(sub_deck, 15)
+    # Once expanded, the list animates Sub into place; a long-press before it settles misses.
+    sub = device.wait_settled(sub_deck, 15)
     if sub is None:
         raise StepFailed('AnkiDroid\'s deck list shows no AuditTest::Sub')
     device.long_press(sub)

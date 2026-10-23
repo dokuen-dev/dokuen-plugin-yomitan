@@ -23,6 +23,12 @@ Everything the plan's Phase 1 lists, and also:
   that step when the device's serial (`--serial`, or else the one `adb get-serialno` reports) is a
   `host:port` or wireless debugging's `._adb-tls-connect._tcp` name, since turning the network off
   would cut that connection.
+- If the test device's Android version is below 13, the plugin's data cleared (`adb shell pm clear
+  io.github.dokuendev.dokuen.plugins.dictionary.yomitan`) and its dictionaries imported again (R3)
+  before every run but the first. Step 3.4 needs Android to ask for the AnkiDroid permission as if
+  for the first time. Android 13 added the command that makes it forget an earlier answer for one
+  app (see 3.1 below), and before that, the only way was to clear the app's data. When an earlier
+  version remembers an answer, 3.1 fails and says so.
 
 Like the plan, the runner needs the device online, since `{audio}` downloads from remote sources
 in Phase 6: 1.3 fails unless Android has validated one of the device's connections as reaching the
@@ -168,8 +174,9 @@ These steps reach the state the plan describes by another route:
 - **1.3** reads `dumpsys connectivity` rather than Android's Settings (see "The network" above).
 - **2.1** always deletes notes left in `AuditTest` (setup's `--clean`), and logs how many.
 - **3.1** also clears Android's record that the permission was denied before
-  (`pm clear-permission-flags`). After two denials, in earlier runs, Android stops asking, and the
-  plugin offers **Open settings** where 3.4 expects **Grant permission**.
+  (`pm clear-permission-flags`, on Android 13 and later). After two denials, in earlier runs,
+  Android stops asking, and the plugin offers **Open settings** where 3.4 expects
+  **Grant permission**.
 - **3.6** revokes the permission with `pm revoke`, which is what Android's Settings does.
 - **6.13** compares the entries' headwords and readings, in order, with the list the plan states
   (`GAKKOU_ENTRIES`), not the dictionary of each entry.

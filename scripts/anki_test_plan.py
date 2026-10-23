@@ -203,7 +203,10 @@ PAGE_SCRIPT = '''<script>
 })();
 </script>
 '''
-PAGE_HTML = ('<!DOCTYPE html>\n<html lang="ja"><head><meta charset="utf-8">\n'
+# Chrome offers to translate a Japanese page with a bar over its top, which also hides part of the
+# page from the runner's UI dump and so moves every scan. notranslate keeps the bar away.
+PAGE_HTML = ('<!DOCTYPE html>\n<html lang="ja" translate="no"><head><meta charset="utf-8">\n'
+             '<meta name="google" content="notranslate">\n'
              '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
              '<title>Anki test page</title></head>\n'
              '<body style="font-size: 32px; line-height: 1.6; margin: 24px;">\n%s<hr>\n<p>%s</p>\n<hr>\n%s%s</body></html>\n' % (
