@@ -106,6 +106,14 @@ show the next time a tap refreshes the lookup. Failures (AnkiDroid missing, perm
 format's deck or note type deleted, add or update failed, export disabled, stale link) are thrown
 as `DictionaryException`s, which the host shows as an error message.
 
+**Progress message.** While a tap runs, the host shows "Adding to deck `<deck>`…" in place of its
+default progress text, with the deck name stored in the format (SDK 0.9.0
+`CustomActionContext.setProgressMessage`). When the write downloads the term's audio (see `{audio}`
+under "Marker/template engine"), the message changes to "Downloading audio…" for the rest of the
+tap. The SDK asks an action to set its message only once, but a download can take several seconds,
+and it is the one wait the user would otherwise not see explained. Hosts older than SDK 0.9.0 show
+their default text.
+
 **After a tap.** A link whose tap added a note reads "Added: `<format>`", and one whose tap overwrote
 an existing note reads "Overwritten: `<format>`" (the shape glyph stays). Only the tapped format's link
 changes; the entry's other links keep their labels. The label is rewritten in place

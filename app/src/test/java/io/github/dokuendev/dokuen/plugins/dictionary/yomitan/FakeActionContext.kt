@@ -8,7 +8,8 @@ import io.github.dokuendev.dokuenreader.dictionary.WordReading
 
 /**
  * A host that answers image requests from [images] (NoImage otherwise), text requests with
- * [clipboardText], and readings requests with [readings], and records them.
+ * [clipboardText], and readings requests with [readings], and records them along with the
+ * progress messages it is sent.
  */
 class FakeActionContext(
     private val images: Map<ImageRequestSource, ImageRequestResult> = emptyMap(),
@@ -26,6 +27,9 @@ class FakeActionContext(
     /** Every request, in order: "readings", "image:<source>", or "text". */
     val log = mutableListOf<String>()
 
+    /** The progress messages sent, in order. */
+    val progressMessages = mutableListOf<String?>()
+
     override suspend fun requestImage(source: ImageRequestSource, interactive: Boolean): ImageRequestResult {
         requests += source to interactive
         log += "image:$source"
@@ -42,6 +46,10 @@ class FakeActionContext(
         readingsRequests += text
         log += "readings"
         return readings(text)
+    }
+
+    override fun setProgressMessage(message: String?) {
+        progressMessages += message
     }
 }
 

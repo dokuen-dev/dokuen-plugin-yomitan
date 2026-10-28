@@ -118,6 +118,8 @@
     <string name="anki_audio_default_sources_label">Enable Default Audio Sources</string>
     <string name="anki_audio_timeout_label">Idle download timeout (in milliseconds)</string>
     <string name="anki_audio_timeout_description">The maximum time before an idle download will be cancelled; 0 = no limit.</string>
+    <string name="anki_progress_adding">Adding to deck %1$s…</string>
+    <string name="anki_progress_downloading_audio">Downloading audio…</string>
     <string name="anki_note_added">Note added to Anki.</string>
     <string name="anki_note_updated">Note updated in Anki.</string>
     <string name="error_anki_export_disabled">Anki export is turned off in the plugin settings.</string>

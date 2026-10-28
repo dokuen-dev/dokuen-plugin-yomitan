@@ -262,6 +262,17 @@ class AnkiExecutionTest {
     }
 
     @Test
+    fun tapShowsTheDeckItAddsToWhileItWorks() = runBlocking {
+        val service = newService(settings(), mockClient())
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext()
+
+        service.executeAction(payload, context)
+
+        assertEquals(listOf("Adding to deck Default…"), context.progressMessages)
+    }
+
+    @Test
     fun unknownMarkerIsWrittenAsRenderErrorAndReported() = runBlocking {
         val client = mockClient()
         val badFormat =
@@ -1912,6 +1923,18 @@ class AnkiExecutionTest {
         // A timeout of 0 means none.
         assertNull(http.requests.single().timeoutMillis)
         assertNull((result as CustomActionResult.UpdateResult).message)
+    }
+
+    @Test
+    fun tapSaysWhenItDownloadsAudio() = runBlocking {
+        val client = mockClient().also { stubAddMedia(it) }
+        val service = newService(settings(audioFormat()), client, http = jpod101Audio())
+        val payload = addPayloads(lookup(service, "食べる").entries[0]).single()
+        val context = FakeActionContext()
+
+        service.executeAction(payload, context)
+
+        assertEquals(listOf("Adding to deck Default…", "Downloading audio…"), context.progressMessages)
     }
 
     @Test

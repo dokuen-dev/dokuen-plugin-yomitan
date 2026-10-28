@@ -1649,6 +1649,7 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         // settings, so the index always means the format the user tapped.
         val format = linkContext.formats.getOrNull(formatIndex)
             ?: throw DictionaryException(DictionaryErrorCode.INTERNAL_ERROR, getString(R.string.error_anki_stale_link))
+        actionContext.setProgressMessage(getString(R.string.anki_progress_adding, format.deckName))
         val settings = linkContext.settings
 
         // The snapshot only decides which format and duplicate rules apply; whether export is
@@ -1925,6 +1926,8 @@ class YomitanDictionaryPluginService : DictionaryPluginService() {
         if (noteData.type == AnkiEntryType.TERM && (noteData.expression.isNotEmpty() || noteData.reading.isNotEmpty()) &&
             AnkiMediaNeeds.isNeeded(AnkiMediaNeeds.AUDIO, fieldNames, format.fields, existing)
         ) {
+            // A download can take seconds, so the user is told why the add is taking longer.
+            actionContext.setProgressMessage(getString(R.string.anki_progress_downloading_audio))
             when (val result = downloadAnkiAudio(settings, noteData)) {
                 is AnkiAudioResult.Audio -> {
                     val fileName = storeAnkiAudio(result)

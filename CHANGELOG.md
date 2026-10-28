@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0]
+
+### Added
+
+- While an Anki link's note is being added, the dictionary window now shows "Adding to deck"
+  `<deck>`…" or "Downloading audio…", instead of the default progress text. Requires Dokuen plugin
+  SDK 0.9.0 or newer; older versions keep showing the default text.
+
 ## [1.4.0]
 
 ### Added
