@@ -7,6 +7,8 @@
 - While an Anki link's note is being added, the dictionary window now shows "Adding to deck"
   `<deck>`…" or "Downloading audio…", instead of the default progress text. Requires Dokuen plugin
   SDK 0.9.0 or newer; older versions keep showing the default text.
+- New `plugin_inline_icon` icon, shows in the host UI when the plugin is selected. Requires Dokuen
+  plugin SDK 0.9.0 or newer.
 
 ## [1.4.0]
 

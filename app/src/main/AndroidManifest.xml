@@ -60,6 +60,11 @@
             <meta-data
                 android:name="plugin_support_email"
                 android:value="dokuen.reader@gmail.com" />
+
+            <!-- Optional inline icon for dictionary settings screen and mini settings cards -->
+            <meta-data
+                android:name="plugin_inline_icon"
+                android:resource="@drawable/inline_icon" />
         </service>
 
         <provider
