@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.1]
+
+### Fixed
+
+- `{audio}` now URL-encodes the values it puts into request URLs, such as `{term}` and `{reading}`,
+  so special characters (`&`, `#`, `+`, `/`) do not break the request.
+- Lingua Libre and Wiktionary lookups now regex-escape the term and uploader name when searching
+  for files, so special characters (`.`, `+`, `()`) are matched literally.
+
 ## [1.5.0]
 
 ### Added
@@ -74,10 +83,11 @@
     - Per-run furigana distribution matching the original's backtracking segmentation algorithm.
     - Structured-content-to-HTML glossary conversion (lists, tables, links, ruby, collapsible
       spoiler blocks) with dictionary-scoped `styles.css` embedded in `<style>` elements.
-    - Deck-scoped duplicate detection (Collection, Deck, Deck root, check across all models) matching
-      Anki's first-field checksum (`csum`).
+    - Deck-scoped duplicate detection (Collection, Deck, Deck root, check across all models)
+      matching Anki's first-field checksum (`csum`).
     - Configurable duplicate behaviors (Prevent adding, Allow overwriting, Allow adding) with
-      per-field overwrite modes (Fill if empty, Overwrite if available, Overwrite, Append, Prepend, Skip).
+      per-field overwrite modes (Fill if empty, Overwrite if available, Overwrite, Append, Prepend,
+      Skip).
     - In-lookup action links with card format shape glyphs (●, ◉, ■, ◆), updating to "Added" /
       "Overwritten" after an export and supporting follow-up taps per duplicate settings.
     - Duplicate checking that dynamically recolors an entry's action links by duplicate state

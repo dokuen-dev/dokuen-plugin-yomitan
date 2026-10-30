@@ -10,8 +10,11 @@ internal object AnkiUrls {
     /**
      * Percent-encodes in [url] what is unsafe to send as-is: spaces, control characters, non-ASCII
      * characters (as UTF-8), and `"`, `<`, `>`, backtick, `{`, `}`, `|`, `\`, and `^`. Existing
-     * escapes and the URL's syntax are left alone. The original builds Jisho, Wikimedia Commons,
-     * and custom URLs with the raw term and leaves this to fetch.
+     * escapes and the URL's syntax are left alone. The original leaves this to fetch for every URL
+     * it requests. Here the values put into URLs are already percent-encoded, with
+     * [encodeUriComponent] or [encodeComponent], so this only matters for the parts of a URL that
+     * come from elsewhere, such as the text of a custom URL template or a URL a server answered
+     * with.
      *
      * This doesn't match a browser's URL parser exactly. For example, a browser leaves `|`
      * unescaped in a query string, so `iiprop=user|url` goes out as `%7C` here. Servers decode
@@ -32,6 +35,25 @@ internal object AnkiUrls {
                 }
             }
             i += Character.charCount(codePoint)
+        }
+        return result.toString()
+    }
+
+    /**
+     * [value] encoded as JavaScript's encodeURIComponent encodes it: everything except ASCII
+     * letters, digits, and `-_.!~*'()` is percent-encoded as UTF-8, so the result is safe in a path
+     * segment as well as in a query value.
+     */
+    fun encodeUriComponent(value: String): String {
+        val result = StringBuilder(value.length)
+        for (byte in value.toByteArray(Charsets.UTF_8)) {
+            val b = byte.toInt() and 0xFF
+            val c = b.toChar()
+            if (c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c in "-_.!~*'()") {
+                result.append(c)
+            } else {
+                result.append('%').append(HEX[b shr 4]).append(HEX[b and 0xF])
+            }
         }
         return result.toString()
     }

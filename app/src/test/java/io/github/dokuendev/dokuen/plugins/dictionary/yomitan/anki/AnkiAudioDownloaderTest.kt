@@ -57,6 +57,15 @@ class AnkiAudioDownloaderTest {
     }
 
     @Test
+    fun jpod101EscapesUrlSyntaxInTheTermAndReading() {
+        // Encoded as URLSearchParams encodes them, as in the original: spaces as +.
+        assertEquals(
+            listOf(JPOD101 + "kanji=a%26b+%231%2F2%2B3%25&kana=x+y"),
+            AnkiAudioDownloader(FakeAnkiHttp()).termAudioUrls(JPOD101_ONLY[0], "a&b #1/2+3%", "x y", "ja")
+        )
+    }
+
+    @Test
     fun theFirstValidDownloadIsReturned() {
         val http = FakeAnkiHttp(TABERU_JPOD101 to FakeAnkiHttp.Reply.audio(byteArrayOf(9, 8), "audio/mpeg"))
 
@@ -89,7 +98,9 @@ class AnkiAudioDownloaderTest {
         val custom = AnkiAudioSource(AnkiAudioSourceType.CUSTOM, "http://localhost/{term}/{reading}.mp3")
         val http = FakeAnkiHttp(
             TABERU_JPOD101 to FakeAnkiHttp.Reply.status(404),
-            "http://localhost/食べる/たべる.mp3" to FakeAnkiHttp.Reply.audio(byteArrayOf(7))
+            "http://localhost/%E9%A3%9F%E3%81%B9%E3%82%8B/%E3%81%9F%E3%81%B9%E3%82%8B.mp3" to FakeAnkiHttp.Reply.audio(
+                byteArrayOf(7)
+            )
         )
 
         val result = download(http, sources = JPOD101_ONLY + custom)
@@ -102,8 +113,18 @@ class AnkiAudioDownloaderTest {
         val source = AnkiAudioSource(AnkiAudioSourceType.CUSTOM, "http://x/{term}?r={reading}&l={language}&o={other}")
 
         assertEquals(
-            listOf("http://x/食べる?r=たべる&l=ja&o={other}"),
+            listOf("http://x/%E9%A3%9F%E3%81%B9%E3%82%8B?r=%E3%81%9F%E3%81%B9%E3%82%8B&l=ja&o={other}"),
             AnkiAudioDownloader(FakeAnkiHttp()).termAudioUrls(source, "食べる", "たべる", "ja")
+        )
+    }
+
+    @Test
+    fun customUrlEscapesUrlSyntaxInItsValues() {
+        val source = AnkiAudioSource(AnkiAudioSourceType.CUSTOM, "http://x/{term}?r={reading}")
+
+        assertEquals(
+            listOf("http://x/AT%26T%20%231%2F2%2B3%3F?r=a%20b%25"),
+            AnkiAudioDownloader(FakeAnkiHttp()).termAudioUrls(source, "AT&T #1/2+3?", "a b%", "ja")
         )
     }
 
@@ -111,7 +132,7 @@ class AnkiAudioDownloaderTest {
     fun customJsonListsItsUrls() {
         val source = AnkiAudioSource(AnkiAudioSourceType.CUSTOM_JSON, "http://localhost:5050/?term={term}")
         val http = FakeAnkiHttp(
-            "http://localhost:5050/?term=食べる" to FakeAnkiHttp.Reply.text(
+            "http://localhost:5050/?term=%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.text(
                 """{"type":"audioSourceList","audioSources":[{"name":"a","url":"http://a/1.mp3"},{"url":"http://a/2.mp3"}]}"""
             )
         )
@@ -157,7 +178,7 @@ class AnkiAudioDownloaderTest {
         val result = download(http, sources = listOf(custom), enableDefaultAudioSources = true)
 
         assertArrayEquals(byteArrayOf(5), (result as AnkiAudioResult.Audio).data)
-        assertEquals(listOf("http://c/食べる", TABERU_JPOD101), http.requests.map { it.url })
+        assertEquals(listOf("http://c/%E9%A3%9F%E3%81%B9%E3%82%8B", TABERU_JPOD101), http.requests.map { it.url })
     }
 
     @Test
@@ -191,7 +212,7 @@ class AnkiAudioDownloaderTest {
     @Test
     fun oneResponseMeansNotOffline() {
         val custom = AnkiAudioSource(AnkiAudioSourceType.CUSTOM, "http://c/{term}")
-        val http = FakeAnkiHttp("http://c/食べる" to FakeAnkiHttp.Reply.status(404))
+        val http = FakeAnkiHttp("http://c/%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.status(404))
 
         assertSame(AnkiAudioResult.NoAudio, download(http, sources = JPOD101_ONLY + custom))
     }
@@ -307,7 +328,7 @@ class AnkiAudioDownloaderTest {
             <audio id="audio_食べる:たべる"><source src="//d1vjc5dkcd3yh2.cloudfront.net/audio/abc.mp3" type="audio/mpeg"></audio>
             <audio id="audio_食べる:くべる"><source src="//d1vjc5dkcd3yh2.cloudfront.net/audio/other.mp3"></audio>
         """.trimIndent()
-        val http = FakeAnkiHttp("https://jisho.org/search/食べる" to FakeAnkiHttp.Reply.text(page))
+        val http = FakeAnkiHttp("https://jisho.org/search/%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.text(page))
 
         assertEquals(
             listOf("https://d1vjc5dkcd3yh2.cloudfront.net/audio/abc.mp3"),
@@ -321,10 +342,21 @@ class AnkiAudioDownloaderTest {
     }
 
     @Test
+    fun jishoEscapesUrlSyntaxInTheTerm() {
+        val page = """<audio id="audio_a/b#c:x"><source src="https://cdn.example/abc.mp3"></audio>"""
+        val http = FakeAnkiHttp("https://jisho.org/search/a%2Fb%23c" to FakeAnkiHttp.Reply.text(page))
+
+        assertEquals(
+            listOf("https://cdn.example/abc.mp3"),
+            AnkiAudioDownloader(http).termAudioUrls(AnkiAudioSource(AnkiAudioSourceType.JISHO), "a/b#c", "x", "ja")
+        )
+    }
+
+    @Test
     fun lookupsUseTheLookupTimeoutAndDownloadsTheSetting() {
         val page = """<audio id="audio_食べる:たべる"><source src="https://cdn.example/abc.mp3"></audio>"""
         val http = FakeAnkiHttp(
-            "https://jisho.org/search/食べる" to FakeAnkiHttp.Reply.text(page),
+            "https://jisho.org/search/%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.text(page),
             "https://cdn.example/abc.mp3" to FakeAnkiHttp.Reply.audio()
         )
 
@@ -339,7 +371,7 @@ class AnkiAudioDownloaderTest {
     @Test
     fun aTimedOutLookupIsAnUnreachableSourceNotATimedOutDownload() {
         val jisho = listOf(AnkiAudioSource(AnkiAudioSourceType.JISHO))
-        val timedOut = "https://jisho.org/search/食べる" to FakeAnkiHttp.Reply.timeout()
+        val timedOut = "https://jisho.org/search/%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.timeout()
 
         assertSame(AnkiAudioResult.Offline, download(FakeAnkiHttp(timedOut), sources = jisho))
         assertSame(
@@ -353,7 +385,8 @@ class AnkiAudioDownloaderTest {
 
     @Test
     fun jishoWithoutTheAudioElementGivesNoUrls() {
-        val http = FakeAnkiHttp("https://jisho.org/search/食べる" to FakeAnkiHttp.Reply.text("<p>none</p>"))
+        val http =
+            FakeAnkiHttp("https://jisho.org/search/%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.text("<p>none</p>"))
 
         assertEquals(
             emptyList<String>(),
@@ -368,7 +401,8 @@ class AnkiAudioDownloaderTest {
 
     private val commons = "https://commons.wikimedia.org/w/api.php?action=query&format=json"
 
-    private fun fileInfo(title: String) = "$commons&titles=$title&prop=imageinfo&iiprop=user|url&origin=*"
+    private fun fileInfo(title: String) =
+        "$commons&titles=${AnkiUrls.encodeUriComponent(title)}&prop=imageinfo&iiprop=user|url&origin=*"
 
     private fun fileInfoReply(url: String, user: String) =
         FakeAnkiHttp.Reply.text("""{"query":{"pages":{"1":{"imageinfo":[{"url":"$url","user":"$user"}]}}}}""")
@@ -395,6 +429,48 @@ class AnkiAudioDownloaderTest {
         assertEquals(
             listOf("https://upload.wikimedia.org/a.wav"),
             AnkiAudioDownloader(http).termAudioUrls(AnkiAudioSource(AnkiAudioSourceType.LINGUA_LIBRE), "chat", "", "fr")
+        )
+    }
+
+    @Test
+    fun linguaLibreEscapesTheTermAndUploaderInItsPatternsAndUrls() {
+        // The term is escaped for the search's regex (a+b&c as a\+b\&c), then percent-encoded.
+        val search = "$commons&list=search&srsearch=intitle:/-a%5C%2Bb%5C%26c.wav/i" +
+                "+incategory:\"Lingua_Libre_pronunciation-fra\"&srnamespace=6&origin=*"
+        val title = "File:LL-Q150 (fra)-Al.ce (x)-a+b&c.wav"
+        val http = FakeAnkiHttp(
+            search to FakeAnkiHttp.Reply.text("""{"query":{"search":[{"title":"$title"}]}}"""),
+            fileInfo(title) to fileInfoReply("https://upload.wikimedia.org/a.wav", "Al.ce (x)")
+        )
+
+        assertEquals(
+            "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
+                    "&titles=File%3ALL-Q150%20(fra)-Al.ce%20(x)-a%2Bb%26c.wav&prop=imageinfo&iiprop=user|url&origin=*",
+            fileInfo(title)
+        )
+        assertEquals(
+            listOf("https://upload.wikimedia.org/a.wav"),
+            AnkiAudioDownloader(http).termAudioUrls(
+                AnkiAudioSource(AnkiAudioSourceType.LINGUA_LIBRE),
+                "a+b&c",
+                "",
+                "fr"
+            )
+        )
+    }
+
+    @Test
+    fun wiktionaryEscapesTheTermInItsPatterns() {
+        val search =
+            "$commons&list=search&srsearch=intitle:/en(-[a-zA-Z]{2})?-c%5C%2B%5C%2B[0123456789]*.ogg/i&srnamespace=6&origin=*"
+        val http = FakeAnkiHttp(
+            search to FakeAnkiHttp.Reply.text("""{"query":{"search":[{"title":"File:En-c++.ogg"}]}}"""),
+            fileInfo("File:En-c++.ogg") to fileInfoReply("https://upload.wikimedia.org/c.ogg", "A")
+        )
+
+        assertEquals(
+            listOf("https://upload.wikimedia.org/c.ogg"),
+            AnkiAudioDownloader(http).termAudioUrls(AnkiAudioSource(AnkiAudioSourceType.WIKTIONARY), "c++", "", "en")
         )
     }
 
@@ -505,7 +581,9 @@ class AnkiAudioDownloaderTest {
     @Test
     fun invalidCustomUrlIsNoAudioNotOffline() {
         val custom = AnkiAudioSource(AnkiAudioSourceType.CUSTOM, "{term}")
-        val http = FakeAnkiHttp("食べる" to FakeAnkiHttp.Reply.failing(IllegalArgumentException("Invalid URL")))
+        val http = FakeAnkiHttp(
+            "%E9%A3%9F%E3%81%B9%E3%82%8B" to FakeAnkiHttp.Reply.failing(IllegalArgumentException("Invalid URL"))
+        )
 
         assertSame(AnkiAudioResult.NoAudio, download(http, sources = listOf(custom)))
     }

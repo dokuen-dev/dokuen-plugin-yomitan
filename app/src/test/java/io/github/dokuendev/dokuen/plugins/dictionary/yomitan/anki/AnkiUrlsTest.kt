@@ -21,6 +21,14 @@ class AnkiUrlsTest {
     }
 
     @Test
+    fun encodeUriComponentMatchesJavaScript() {
+        assertEquals(
+            "%E9%A3%9F%20a-_.!~*'()%26%23%2F%3F%2B%25%3A%5C",
+            AnkiUrls.encodeUriComponent("食 a-_.!~*'()&#/?+%:\\")
+        )
+    }
+
+    @Test
     fun formEncodeMatchesUrlSearchParams() {
         assertEquals(
             "post=dictionary_reference&search_query=%E9%A3%9F%E3%81%B9%E3%82%8B&q=a+b%26c",

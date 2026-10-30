@@ -627,11 +627,11 @@ API surface or a deliberate scope boundary:
   image it stored and, when the clipboard still holds the same image, stores it again under the
   same name, so the notes share one file. Through AnkiDroid each add stores a new file (see the
   previous point).
-- **Images and sentence furigana are requested only for fields the write keeps.** The original
-  collects the media a card format uses from all of its fields, and on an overwrite still captures
-  and stores the image of a Skip field, or of a "Fill if empty" field that is not empty, before the
-  merge drops it. The plugin does not ask for those (so Dokuen shows no crop UI for them); the
-  resulting note is the same.
+- **Media and sentence furigana are requested only for fields the write keeps.** The original
+  collects media for all fields in a card format, so on an overwrite it still captures images and
+  downloads audio for `Skip` fields or non-empty `Fill if empty` fields before the merge drops
+  them. The plugin only requests media and furigana for fields that will actually be written
+  (avoiding unnecessary downloads and Dokuen's crop UI).
 - **The screenshot is the image Dokuen OCR'ed**, not a capture of a browser tab, optionally
   cropped or replaced by a file in Dokuen's crop UI.
 - **Media file names start with `dokuen_`.** The original names its images
@@ -652,22 +652,24 @@ API surface or a deliberate scope boundary:
   and only the downloads follow its download timeout (`anki.downloadTimeout`). A lookup that never
   answers costs nothing in its popup, but here it would hold the Anki write indefinitely, so a
   lookup is cancelled after 30 seconds without progress (`AnkiAudioDownloader.LOOKUP_TIMEOUT_MILLIS`).
-- **Audio is downloaded only for fields the write keeps**, like the images (see above). On an
-  overwrite, the original downloads it even when the merge then drops it.
 - **There are no text-to-speech audio sources and no preferred audio choice.** The original never
   exports text-to-speech audio to Anki, and its preferred audio comes from its popup's audio menu,
   which the plugin does not have, so `{audio}` always takes the first valid file.
-- **Wikimedia Commons files are looked up one at a time, as they are needed.** For Lingua Libre
-  and Wiktionary, the original sends a file-info request for every search hit at once
-  (`Promise.all` in `_getInfoWikimediaCommons`) and tries the files only once every request has
-  answered, because the same lookup also fills its popup's audio menu, which lists every file.
-  `{audio}` only uses the first file that downloads, so the plugin looks up a hit only after the
-  hits before it have failed to download. When the first hit downloads, the source makes three
-  requests (the search, one file-info request, and the download) instead of one file-info request
-  per hit plus the download. A failed file-info request also behaves differently: it ends that
-  source's candidates but keeps the files found before it, where the original loses all of that
-  source's files. The plugin therefore finds audio in a few cases where desktop finds none, and it
-  never misses audio that desktop finds. `AnkiAudioDownloaderTest` covers this.
+- **Wikimedia Commons files are looked up one at a time, as needed.** For Lingua Libre and
+  Wiktionary, the original fetches file info for every search hit at once (`Promise.all` in
+  `_getInfoWikimediaCommons`) to populate its popup's audio menu, losing all candidates if any
+  request fails. Because `{audio}` only needs the first working file, the plugin queries hits
+  sequentially until one downloads, making fewer requests and keeping earlier candidates if a
+  later lookup fails (`AnkiAudioDownloaderTest`).
+- **Values in audio lookup URLs are percent-encoded.** The original inserts the raw term into its
+  Jisho, Commons search, and custom URLs, the raw reading into custom URLs (`_getCustomUrl`), and
+  the raw file title into Commons file-info URLs. URL syntax characters in them, such as `&`, `#`,
+  `?`, and `+`, can therefore change or break the request. The plugin encodes each value as
+  `encodeURIComponent` does (`AnkiUrls.encodeUriComponent`).
+- **Terms and uploaders are escaped in Wikimedia Commons regexes.** For Lingua Libre and
+  Wiktionary, the original inserts the raw term and uploader into the search's `intitle:/.../`
+  regex and into the regex that checks each file name, so characters such as `+` or `(` alter or
+  break the patterns. The plugin escapes both (`AnkiAudioDownloaderTest`).
 
 **Quirks kept for parity.** These may look like defects, but they mirror the original's settings page
 and note builder, so users moving between the two get the same behavior. Change them only if

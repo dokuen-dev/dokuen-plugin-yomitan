@@ -51,6 +51,9 @@ class AnkiAudioDownloader(private val http: AnkiHttp) {
             "ae6398b5a27bc8c0a771df6c907ade794be15518174773c58c7c7ddd17098906"
         private val CUSTOM_URL_TAG = Regex("\\{([^}]*)\\}")
 
+        /** The characters that have a meaning in a CirrusSearch (Lucene) regular expression. */
+        private const val SEARCH_REGEX_SYNTAX = ".?+*|{}[]()\"\\#@&<>~/"
+
         /**
          * The idle timeout of the lookups that find the candidate URLs. Not to be confused with the
          * download timeout, which is a user setting. The original has no timeout for this step, but
@@ -230,10 +233,10 @@ class AnkiAudioDownloader(private val http: AnkiHttp) {
 
     /**
      * The original's _getInfoJisho, which finds the audio element that Jisho gives the term and
-     * reading.
+     * reading. Unlike the original, the term is percent-encoded in the search URL.
      */
     private fun jishoUrls(http: AnkiHttp, term: String, reading: String): List<String> {
-        val response = http.get("https://jisho.org/search/$term", LOOKUP_TIMEOUT_MILLIS)
+        val response = http.get("https://jisho.org/search/${AnkiUrls.encodeUriComponent(term)}", LOOKUP_TIMEOUT_MILLIS)
         val audio = Jsoup.parse(response.text()).getElementById("audio_$term:$reading")
         val source = audio?.getElementsByTag("source")?.firstOrNull()
         if (source != null && source.hasAttr("src")) {
@@ -243,29 +246,46 @@ class AnkiAudioDownloader(private val http: AnkiHttp) {
     }
 
     /**
-     * The original's _getInfoLinguaLibre. As in the original, the term goes into the search and
-     * the file name pattern unescaped; a term that makes an invalid pattern gives no URLs.
+     * The original's _getInfoLinguaLibre. Unlike the original, the term is escaped in the search's
+     * pattern (see [searchTerm]), and the term and uploader are escaped in the file name pattern.
      */
     private fun linguaLibreUrls(http: AnkiHttp, term: String, language: AnkiLanguage): Sequence<String> {
         val iso639Part3 = language.iso639Part3
         val searchCategory = "incategory:\"Lingua_Libre_pronunciation-$iso639Part3\""
-        val searchString = "-$term.wav"
+        val searchString = "-${searchTerm(term)}.wav"
         val fetchUrl = "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search" +
                 "&srsearch=intitle:/$searchString/i+$searchCategory&srnamespace=6&origin=*"
         return wikimediaCommonsUrls(http, fetchUrl) { fileName, fileUser ->
-            Regex("^File:LL-Q\\d+\\s+\\($iso639Part3\\)-$fileUser-$term\\.wav$", RegexOption.IGNORE_CASE)
-                .containsMatchIn(fileName)
+            Regex(
+                "^File:LL-Q\\d+\\s+\\($iso639Part3\\)-${Regex.escape(fileUser)}-${Regex.escape(term)}\\.wav$",
+                RegexOption.IGNORE_CASE
+            ).containsMatchIn(fileName)
         }
     }
 
-    /** The original's _getInfoWiktionary, with the term unescaped as in [linguaLibreUrls]. */
+    /** The original's _getInfoWiktionary, with the term escaped as in [linguaLibreUrls]. */
     private fun wiktionaryUrls(http: AnkiHttp, term: String, language: AnkiLanguage): Sequence<String> {
         val iso = language.iso
-        val searchString = "$iso(-[a-zA-Z]{2})?-$term[0123456789]*.ogg"
+        val searchString = "$iso(-[a-zA-Z]{2})?-${searchTerm(term)}[0123456789]*.ogg"
         val fetchUrl = "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search" +
                 "&srsearch=intitle:/$searchString/i&srnamespace=6&origin=*"
-        val validFileName = Regex("^File:$iso(-\\w\\w)?-$term\\d*\\.ogg$", RegexOption.IGNORE_CASE)
+        val validFileName = Regex("^File:$iso(-\\w\\w)?-${Regex.escape(term)}\\d*\\.ogg$", RegexOption.IGNORE_CASE)
         return wikimediaCommonsUrls(http, fetchUrl) { fileName, _ -> validFileName.containsMatchIn(fileName) }
+    }
+
+    /**
+     * [term] as it goes into a Commons search's `intitle:/.../` pattern: each regex syntax
+     * character is escaped with a backslash so that it matches literally, and the result is
+     * percent-encoded for the query string.
+     */
+    private fun searchTerm(term: String): String {
+        val escaped = buildString {
+            for (c in term) {
+                if (c in SEARCH_REGEX_SYNTAX) append('\\')
+                append(c)
+            }
+        }
+        return AnkiUrls.encodeUriComponent(escaped)
     }
 
     /**
@@ -286,7 +306,7 @@ class AnkiAudioDownloader(private val http: AnkiHttp) {
         for (result in search) {
             val title = result.jsonObject.getValue("title").jsonPrimitive.content
             val fileInfoUrl = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
-                    "&titles=$title&prop=imageinfo&iiprop=user|url&origin=*"
+                    "&titles=${AnkiUrls.encodeUriComponent(title)}&prop=imageinfo&iiprop=user|url&origin=*"
             val pages = Json.parseToJsonElement(http.get(fileInfoUrl, LOOKUP_TIMEOUT_MILLIS).text()).jsonObject
                 .getValue("query").jsonObject.getValue("pages").jsonObject
             for (page in pages.values) {
@@ -312,10 +332,12 @@ class AnkiAudioDownloader(private val http: AnkiHttp) {
 
     /**
      * The original's _getCustomUrl. It replaces `{term}`, `{reading}`, and `{language}` (the ISO
-     * code) and leaves any other `{...}` as it is.
+     * code) and leaves any other `{...}` as it is. Unlike the original, the values are
+     * percent-encoded, so URL syntax in a term cannot change the URL's structure.
      */
     private fun customUrl(url: String, term: String, reading: String, language: AnkiLanguage): String {
         val values = mapOf("term" to term, "reading" to reading, "language" to language.iso)
+            .mapValues { (_, value) -> AnkiUrls.encodeUriComponent(value) }
         return CUSTOM_URL_TAG.replace(url) { match -> values[match.groupValues[1]] ?: match.value }
     }
 
