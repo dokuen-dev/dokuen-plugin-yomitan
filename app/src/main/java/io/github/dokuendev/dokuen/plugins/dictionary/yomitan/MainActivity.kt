@@ -570,6 +570,8 @@ fun DictionariesPage(
     val navigationBarBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var customUrl by remember { mutableStateOf("") }
+    var wiktionarySource by rememberSaveable { mutableStateOf(WiktionaryDictionaries.DEFAULT_SOURCE) }
+    var wiktionaryTarget by rememberSaveable { mutableStateOf("") }
     var deleteConfirmDict by remember { mutableStateOf<DictionaryEntity?>(null) }
     var deleteMode by remember { mutableStateOf(false) }
 
@@ -1013,6 +1015,20 @@ fun DictionariesPage(
                         )
                     }
                 }
+            }
+
+            // Wiktionary dictionaries, picked by language pair
+            item {
+                WiktionaryDictionariesCard(
+                    catalogState = uiState.wiktionaryCatalogState,
+                    installedTitles = uiState.installedDictionaries.mapTo(mutableSetOf()) { it.meta.title },
+                    source = wiktionarySource,
+                    target = wiktionaryTarget,
+                    onSourceChange = { wiktionarySource = it },
+                    onTargetChange = { wiktionaryTarget = it },
+                    onLoadCatalog = viewModel::loadWiktionaryCatalog,
+                    onDownload = { viewModel.downloadAndInstallPreset(it.url, it.title) }
+                )
             }
 
             // Local ZIP Card

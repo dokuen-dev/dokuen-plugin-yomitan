@@ -1,6 +1,12 @@
 # Changelog
 
-## [1.5.1]
+## Unreleased
+
+### Added
+
+- A new "Wiktionary Dictionaries" section for installing non-English dictionaries. A direct port of
+  the wiktionary-to-yomitan (wty) download page
+  (https://yomidevs.github.io/wiktionary-to-yomitan/download/).
 
 ### Fixed
 

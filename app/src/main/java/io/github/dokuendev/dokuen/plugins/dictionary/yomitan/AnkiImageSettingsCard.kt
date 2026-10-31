@@ -113,13 +113,14 @@ internal fun <T> SettingDropdown(
     selected: T,
     options: List<T>,
     optionLabel: @Composable (T) -> String,
-    onSelect: (T) -> Unit
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
             modifier = Modifier
@@ -127,7 +128,8 @@ internal fun <T> SettingDropdown(
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             readOnly = true,
             singleLine = true,
-            value = optionLabel(selected),
+            // Space rather than empty string to avoid the label jumping up when the field is empty.
+            value = optionLabel(selected).ifEmpty { " " },
             onValueChange = {},
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },

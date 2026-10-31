@@ -59,6 +59,14 @@ data class ErrorDialogState(
     val message: String
 )
 
+/** Loading of the wty release metadata, which lists the Wiktionary dictionaries to offer. */
+sealed interface WiktionaryCatalogState {
+    data object NotLoaded : WiktionaryCatalogState
+    data object Loading : WiktionaryCatalogState
+    data class Loaded(val catalog: WiktionaryCatalog) : WiktionaryCatalogState
+    data object Failed : WiktionaryCatalogState
+}
+
 data class MainUiState(
     val installedDictionaries: List<InstalledDictionaryInfo> = emptyList(),
     val activeDictionaries: Set<String> = emptySet(),
@@ -74,7 +82,8 @@ data class MainUiState(
     val ankiDroidInstalled: Boolean = false,
     val ankiDroidPermissionGranted: Boolean = false,
     val ankiDeckOptions: Map<Long, String> = emptyMap(),
-    val ankiModelOptions: Map<Long, String> = emptyMap()
+    val ankiModelOptions: Map<Long, String> = emptyMap(),
+    val wiktionaryCatalogState: WiktionaryCatalogState = WiktionaryCatalogState.NotLoaded
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -630,6 +639,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 tempFile?.delete()
             }
+        }
+    }
+
+    /** Fetches the wty release metadata once; after a failure, calling it again retries. */
+    fun loadWiktionaryCatalog() {
+        val state = _uiState.value.wiktionaryCatalogState
+        if (state is WiktionaryCatalogState.Loading || state is WiktionaryCatalogState.Loaded) return
+        _uiState.update { it.copy(wiktionaryCatalogState = WiktionaryCatalogState.Loading) }
+        viewModelScope.launch {
+            val newState = withContext(Dispatchers.IO) {
+                try {
+                    val connection = URL(WiktionaryDictionaries.METADATA_URL).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 20000
+                    connection.readTimeout = 20000
+                    try {
+                        if (connection.responseCode !in 200..299) {
+                            throw Exception("Server returned HTTP error ${connection.responseCode}")
+                        }
+                        val json = connection.inputStream.bufferedReader().use { it.readText() }
+                        WiktionaryCatalogState.Loaded(WiktionaryCatalog.parse(json))
+                    } finally {
+                        connection.disconnect()
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error loading the Wiktionary dictionary list", e)
+                    WiktionaryCatalogState.Failed
+                }
+            }
+            _uiState.update { it.copy(wiktionaryCatalogState = newState) }
         }
     }
 
